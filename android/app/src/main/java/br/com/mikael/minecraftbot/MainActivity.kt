@@ -21,7 +21,6 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(155, 176, 162)
     private lateinit var root: LinearLayout
     private lateinit var pages: FrameLayout
-    private lateinit var api: EditText
     private lateinit var token: EditText
     private lateinit var host: EditText
     private lateinit var port: EditText
@@ -77,8 +76,7 @@ class MainActivity : Activity() {
         pageViews.add(box); return box
     }
     private fun buildConnectPage() {
-        val p=page("Conexão do servidor","Configure a API e os dados do servidor Java.")
-        api=field(p,"URL do backend","https://seu-backend.example")
+        val p=page("Conexão do servidor","Backend configurado automaticamente. Informe o token e os dados do servidor Java.")
         token=field(p,"Token da API","API_TOKEN")
         host=field(p,"IP ou domínio do servidor","play.exemplo.com")
         port=field(p,"Porta","25565")
@@ -139,7 +137,7 @@ class MainActivity : Activity() {
     private fun dp(n:Int)= (n*resources.displayMetrics.density).toInt()
 
     private fun request(method:String,path:String,body:JSONObject) {
-        val base=api.text.toString().trim().trimEnd('/'); val secret=token.text.toString().trim()
+        val base="https://minecraftbotmobile.onrender.com"; val secret=token.text.toString().trim()
         if(base.isBlank()||secret.isBlank()) { status.text="●  Informe URL e token da API"; return }
         if(!base.startsWith("https://")&&!base.startsWith("http://")) { status.text="●  URL inválida"; return }
         busy=true; status.text="●  Enviando pedido..."
