@@ -77,7 +77,7 @@ class MainActivity : Activity() {
     }
     private fun buildConnectPage() {
         val p=page("Conexão do servidor","Backend configurado automaticamente. Informe o token e os dados do servidor Java.")
-        token=field(p,"Token da API","API_TOKEN")
+        token=field(p,"Token da API",getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_token", "") ?: "")
         host=field(p,"IP ou domínio do servidor","play.exemplo.com")
         port=field(p,"Porta","25565")
         username=field(p,"Nome do bot","MikaelBot")
@@ -138,6 +138,7 @@ class MainActivity : Activity() {
 
     private fun request(method:String,path:String,body:JSONObject) {
         val base="https://minecraftbotmobile.onrender.com"; val secret=token.text.toString().trim()
+        if (secret.isNotBlank()) getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("api_token", secret).apply()
         if(base.isBlank()||secret.isBlank()) { status.text="●  Informe URL e token da API"; return }
         if(!base.startsWith("https://")&&!base.startsWith("http://")) { status.text="●  URL inválida"; return }
         busy=true; status.text="●  Enviando pedido..."
