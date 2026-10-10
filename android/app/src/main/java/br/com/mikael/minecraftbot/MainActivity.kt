@@ -37,19 +37,24 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = bg; window.navigationBarColor = bg
         val scroll = ScrollView(this)
-        root = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(18,16,18,22); setBackgroundColor(bg) }
+        scroll.isFillViewport = true
+        root = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(16),dp(10),dp(16),dp(12)); setBackgroundColor(Color.rgb(5,16,12)); minimumHeight = resources.displayMetrics.heightPixels }
         scroll.addView(root); setContentView(scroll)
 
         val brand = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(2,4,2,14) }
-        val logo = ImageView(this).apply { setImageResource(R.drawable.bot_hero); scaleType=ImageView.ScaleType.CENTER_CROP }
+        val logo = ImageView(this).apply { setImageResource(R.drawable.ic_launcher_minecraft); scaleType=ImageView.ScaleType.FIT_CENTER }
         brand.addView(logo, LinearLayout.LayoutParams(dp(62),dp(62)))
         val brandText = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(12,0,0,0) }
-        brandText.addView(text("MINECRAFT BOT",20,green,true))
-        brandText.addView(text("MOBILE CONTROL CENTER",10,muted,true))
-        brand.addView(brandText); root.addView(brand)
+        val titleRow = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+        titleRow.addView(text("Minecraft",23,white,true))
+        titleRow.addView(text("BotMobile",23,Color.rgb(0,238,91),true))
+        brandText.addView(titleRow)
+        brandText.addView(text("Seu bot de Minecraft no celular",13,muted,false))
+        brand.addView(brandText,LinearLayout.LayoutParams(0,-2,1f))
+        brand.addView(TextView(this).apply { text="⚙"; textSize=28f; setTextColor(green); gravity=Gravity.CENTER; setOnClickListener { showTab(2) } },LinearLayout.LayoutParams(dp(40),dp(52)))
 
         val hero = ImageView(this).apply { setImageResource(R.drawable.bot_hero); scaleType=ImageView.ScaleType.CENTER_CROP; background=rounded(panel,18); clipToOutline=true; contentDescription="Ilustração do bot voxel verde" }
-        root.addView(hero, LinearLayout.LayoutParams(-1,dp(150)).apply { bottomMargin=12 })
+        root.addView(hero, LinearLayout.LayoutParams(-1,dp(202)).apply { topMargin=dp(8); bottomMargin=dp(12) })
 
         val statusCard = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(15,12,15,12) }
         statusCard.addView(text("STATUS DO BOT",10,muted,true))
@@ -64,7 +69,7 @@ class MainActivity : Activity() {
         }
         root.addView(tabs,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
         pages = FrameLayout(this)
-        root.addView(pages,LinearLayout.LayoutParams(-1,-2))
+        root.addView(pages,LinearLayout.LayoutParams(-1,0,1f))
         buildConnectPage(); buildControlPage(); buildAiPage()
         showTab(0)
     }
