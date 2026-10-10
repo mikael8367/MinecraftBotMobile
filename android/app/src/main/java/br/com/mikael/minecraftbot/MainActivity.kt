@@ -21,7 +21,6 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(155, 176, 162)
     private lateinit var root: LinearLayout
     private lateinit var pages: FrameLayout
-    private lateinit var token: EditText
     private lateinit var host: EditText
     private lateinit var port: EditText
     private lateinit var username: EditText
@@ -81,8 +80,7 @@ class MainActivity : Activity() {
         pageViews.add(box); return box
     }
     private fun buildConnectPage() {
-        val p=page("Conexão do servidor","Backend configurado automaticamente. Informe o token e os dados do servidor Java.")
-        token=field(p,"Token da API",getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_token", BuildConfig.API_TOKEN) ?: BuildConfig.API_TOKEN)
+        val p=page("Conexão do servidor","Backend configurado automaticamente. Informe os dados do servidor Java.")
         host=field(p,"IP ou domínio do servidor","play.exemplo.com")
         port=field(p,"Porta","25565")
         username=field(p,"Nome do bot","MikaelBot")
@@ -143,17 +141,15 @@ class MainActivity : Activity() {
     private fun dp(n:Int)= (n*resources.displayMetrics.density).toInt()
 
     private fun request(method:String,path:String,body:JSONObject) {
-        val base=BuildConfig.API_BASE_URL; val secret=token.text.toString().trim().ifBlank { BuildConfig.API_TOKEN }
-        if (secret.isNotBlank()) getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("api_token", secret).apply()
-        if(base.isBlank()||secret.isBlank()) { status.text="●  Token da API ausente; configure API_TOKEN no GitHub Actions ou informe no app"; return }
-        if(!base.startsWith("https://")&&!base.startsWith("http://")) { status.text="●  URL inválida"; return }
+        val base=BuildConfig.API_BASE_URL
+        if(base.isBlank()||(!base.startsWith("https://")&&!base.startsWith("http://"))) { status.text="●  URL do servidor inválida"; return }
         busy=true; status.text="●  Enviando pedido..."
         thread {
             var conn:HttpURLConnection?=null
             try {
                 conn=(URL(base+path).openConnection() as HttpURLConnection).apply {
                     requestMethod=method; connectTimeout=8000; readTimeout=10000
-                    setRequestProperty("Authorization","Bearer $secret"); setRequestProperty("Content-Type","application/json")
+                    setRequestProperty("Content-Type","application/json")
                     if(method!="GET") { doOutput=true; outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) } }
                 }
                 val code=conn.responseCode
