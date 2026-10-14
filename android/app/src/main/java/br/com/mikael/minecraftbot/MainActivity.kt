@@ -142,14 +142,16 @@ class MainActivity : Activity() {
 
     private fun request(method:String,path:String,body:JSONObject) {
         val base=BuildConfig.API_BASE_URL
+        val secret=BuildConfig.API_TOKEN.trim()
         if(base.isBlank()||(!base.startsWith("https://")&&!base.startsWith("http://"))) { status.text="●  URL do servidor inválida"; return }
+        if(secret.isBlank()) { status.text="●  Token não incluído no APK. Configure o segredo API_TOKEN no GitHub."; return }
         busy=true; status.text="●  Enviando pedido..."
         thread {
             var conn:HttpURLConnection?=null
             try {
                 conn=(URL(base+path).openConnection() as HttpURLConnection).apply {
                     requestMethod=method; connectTimeout=8000; readTimeout=10000
-                    setRequestProperty("Content-Type","application/json")
+                    setRequestProperty("Authorization","Bearer $secret"); setRequestProperty("Content-Type","application/json")
                     if(method!="GET") { doOutput=true; outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) } }
                 }
                 val code=conn.responseCode
