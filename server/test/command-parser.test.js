@@ -28,9 +28,11 @@ test('recognizes all documented commands', () => {
   }
 })
 
-test('does not execute unknown or empty phrases', () => {
-  assert.equal(parseCommand(''), null)
-  assert.equal(parseCommand('faz uma casa'), null)
+test('does not execute unknown, empty, or negated phrases', () => {
+  for (const phrase of ['', 'faz uma casa', 'não atacar', 'não pare', 'nunca pule', 'evite correr']) {
+    assert.equal(parseCommand(phrase), null, phrase)
+  }
+  assert.equal(parseCommand('re'), null)
 })
 
 test('caps command processing input to 200 characters', () => {
