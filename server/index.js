@@ -6,6 +6,7 @@ const { pathfinder, goals } = require('mineflayer-pathfinder')
 const { engines, capabilities } = require('./engine-registry')
 const { ValidationError, validateConnectionPayload } = require('./connection-validation')
 const { parseCommand } = require('./command-parser')
+const { applyMovementAction } = require('./movement-actions')
 
 const app = express()
 app.use(express.json({ limit: '32kb' }))
@@ -152,17 +153,14 @@ function pressControl (activeBot, action, durationMs) {
 function executeAction (actionValue, payload = {}) {
   const activeBot = requireConnectedBot()
   const action = String(actionValue || '').trim().toLowerCase()
-  const controls = new Set(['forward', 'back', 'left', 'right', 'jump'])
-  if (controls.has(action)) {
-    pressControl(activeBot, action, 700)
-    return { ok: true, message: 'Ação executada: ' + action }
-  }
-  if (action === 'sprint') {
-    // Sprint only toggles run speed: the bot must also be moving forward.
-    pressControl(activeBot, 'forward', 1200)
-    pressControl(activeBot, 'sprint', 1200)
-    return { ok: true, message: 'Corrida iniciada por 1,2 segundo.' }
-  }
+  const movementResult = applyMovementAction(action, (control, duration) => {
+    // Manual movement takes priority over a pathfinder goal set by "follow".
+    try {
+      if (activeBot.pathfinder && activeBot.pathfinder.goal) activeBot.pathfinder.setGoal(null)
+    } catch (_) {}
+    pressControl(activeBot, control, duration)
+  })
+  if (movementResult) return movementResult
 
   if (action === 'stop') {
     stopMovement(activeBot)
