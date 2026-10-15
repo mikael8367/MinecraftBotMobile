@@ -33,7 +33,71 @@ class MainActivity : Activity() {
     private var busy = false
     private var selectedTab = 0
     private lateinit var botListContainer: LinearLayout
-    private var availableVersions: List<String> = listOf("auto", "26.3", "26.1", "1.21.11", "1.21.8", "1.20.1", "1.12.2", "1.8.9")
+
+    // Fallback metadata from the exact Mineflayer package testedVersions lists.
+    // On startup these are refreshed from /api/capabilities, so UI and backend agree.
+    private var officialTestedVersions = listOf(
+        "1.8.8", "1.9.4", "1.10.2", "1.11.2", "1.12.2", "1.13.2", "1.14.4",
+        "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19", "1.19.2", "1.19.3",
+        "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3",
+        "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.9", "1.21.11", "26.1"
+    )
+    private var mikaelTestedVersions = listOf(
+        "1.8.8", "1.9.4", "1.10.2", "1.11.2", "1.12.2", "1.13.2", "1.14.4",
+        "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19", "1.19.2", "1.19.3",
+        "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3",
+        "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.9", "1.21.11",
+        "26.1.2", "26.2", "26.3"
+    )
+    private val statusHandler = Handler(Looper.getMainLooper())
+    private var pollingStatus = false
+    private var lastPolledState = ""
+    private var lastPolledError = ""
+    private val statusPoller = object : Runnable {
+        override fun run() {
+            if (!pollingStatus) return
+            if (!busy) request("GET", "/api/status", JSONObject(), quiet = true)
+            statusHandler.postDelayed(this, 3000L)
+        }
+    }
+
+    private fun supportedVersions(engineId: String): List<String> =
+        listOf("auto") + if (engineId == "official") officialTestedVersions else mikaelTestedVersions
+
+    private fun configureVersionSpinner(spinner: Spinner, engineId: String, preferred: String) {
+        val options = supportedVersions(engineId)
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
+        val preferredIndex = options.indexOf(preferred).let { if (it >= 0) it else 0 }
+        spinner.setSelection(preferredIndex)
+    }
+
+    private fun watchEngineSelection(engine: Spinner, version: Spinner) {
+        engine.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val preferred = version.selectedItem?.toString() ?: "auto"
+                configureVersionSpinner(version, if (position == 1) "official" else "mikael", preferred)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
+    private fun startStatusPolling() {
+        pollingStatus = true
+        lastPolledState = ""
+        lastPolledError = ""
+        statusHandler.removeCallbacks(statusPoller)
+        statusHandler.postDelayed(statusPoller, 700L)
+    }
+
+    private fun stopStatusPolling() {
+        pollingStatus = false
+        statusHandler.removeCallbacks(statusPoller)
+    }
+
+    override fun onDestroy() {
+        stopStatusPolling()
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,7 +153,7 @@ class MainActivity : Activity() {
         root.addView(pages,LinearLayout.LayoutParams(-1,0,1f))
         buildBotsInfoPage(); buildControlPage(); buildAiPage()
         showTab(0)
-        loadMinecraftVersions()
+        loadEngineCapabilities()
     }
 
     private val pageViews = mutableListOf<View>()
@@ -105,50 +169,6 @@ class MainActivity : Activity() {
             val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("MinecraftBotMobile log",logs.text.toString()))
             Toast.makeText(this,"Log copiado",Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun loadMinecraftVersions() {
-        thread {
-            try {
-                val connection = (URL("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json").openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10000
-                    readTimeout = 15000
-                    requestMethod = "GET"
-                }
-                val json = connection.inputStream.bufferedReader().use { it.readText() }
-                connection.disconnect()
-                val versionsJson = JSONObject(json).getJSONArray("versions")
-                val releases = mutableListOf<String>()
-                val snapshots = mutableListOf<String>()
-                val betas = mutableListOf<String>()
-                val alphas = mutableListOf<String>()
-                for (i in 0 until versionsJson.length()) {
-                    val item = versionsJson.getJSONObject(i)
-                    val id = item.optString("id")
-                    when (item.optString("type")) {
-                        "release" -> releases.add(id)
-                        "snapshot" -> snapshots.add(id)
-                        "old_beta" -> betas.add(id)
-                        "old_alpha" -> alphas.add(id)
-                    }
-                }
-                val all = mutableListOf("auto", "26.3")
-                all.addAll(releases.filter { it != "26.3" })
-                if (snapshots.isNotEmpty()) { all.add("── Snapshots ──"); all.addAll(snapshots) }
-                if (betas.isNotEmpty()) { all.add("── Betas antigas ──"); all.addAll(betas) }
-                if (alphas.isNotEmpty()) { all.add("── Alphas antigas ──"); all.addAll(alphas) }
-                runOnUiThread {
-                    availableVersions = all.filter { !it.startsWith("──") }
-
-                }
-            } catch (_: Exception) {
-                runOnUiThread {
-                    val fallback = listOf("auto","26.3","26.1","1.21.11","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.2","1.21.1","1.21","1.20.6","1.20.4","1.20.1","1.19.4","1.18.2","1.16.5","1.12.2","1.8.9")
-                    availableVersions = fallback
-
-                }
-            }
         }
     }
 
@@ -239,17 +259,19 @@ class MainActivity : Activity() {
         val serverIp = EditText(this).apply { setSingleLine(true); hint="IP ou domínio"; setText(item.optString("host")) }
         val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")) }
         val mcVersion = Spinner(this)
-        val versions = (listOf(item.optString("version","auto")) + availableVersions).distinct()
-        mcVersion.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,versions)
         val engine = Spinner(this)
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer normal"))
-        engine.setSelection(if (item.optString("engine","mikael") == "official") 1 else 0)
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        val selectedEngine = item.optString("engine","mikael")
+        engine.setSelection(if (selectedEngine == "official") 1 else 0)
+        configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
+        watchEngineSelection(engine, mcVersion)
+
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
-        form.addView(text("Mineflayer Mikael é experimental; suporte real depende de testes com o servidor.",11,muted,false))
+        form.addView(text("As versões listadas vêm dos metadados da biblioteca; este app ainda não testou todas em servidores reais.",11,muted,false))
         val dialog = AlertDialog.Builder(this).setTitle("Configurações do bot").setView(form)
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
         dialog.setOnShowListener {
@@ -280,15 +302,17 @@ class MainActivity : Activity() {
         val serverIp = EditText(this).apply { hint="IP ou domínio (ex.: servidor.aternos.me)"; setSingleLine(true) }
         val serverPort = EditText(this).apply { hint="Porta (ex.: 25565)"; setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_NUMBER }
         val mcVersion = Spinner(this)
-        mcVersion.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,availableVersions)
         val engine = Spinner(this)
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer normal"))
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        configureVersionSpinner(mcVersion, "mikael", "26.3")
+        watchEngineSelection(engine, mcVersion)
+
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
-        form.addView(text("Mineflayer Mikael é experimental; versões não testadas podem falhar.",11,muted,false))
+        form.addView(text("A seleção inicial é 26.3 + Mikael experimental. A lista vem do motor, mas o servidor real precisa ser testado.",11,muted,false))
         val dialog = AlertDialog.Builder(this).setTitle("Criar bot").setView(form)
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR BOT",null).create()
         dialog.setOnShowListener {
@@ -298,7 +322,7 @@ class MainActivity : Activity() {
                 val p = serverPort.text.toString().toIntOrNull()
                 val v = mcVersion.selectedItem?.toString() ?: "auto"
                 val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
-                if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535 || v.startsWith("──")) {
+                if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
                     Toast.makeText(this,"Preencha nome, IP e uma porta válida.",Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
@@ -367,61 +391,109 @@ class MainActivity : Activity() {
         logs.text = (logs.text.toString() + "\n[" + stamp + "] " + message).takeLast(12000)
     }
 
-    private fun request(method:String,path:String,body:JSONObject) {
-        val base=BuildConfig.API_BASE_URL
-        val secret=getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_access", "")?.trim().orEmpty()
-        if(base.isBlank()||(!base.startsWith("https://")&&!base.startsWith("http://"))) { status.text="●  URL do servidor inválida"; return }
-        if(secret.isBlank()) {
-            val input = EditText(this).apply { hint = "Senha de acesso da API"; setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
-            AlertDialog.Builder(this).setTitle("Acesso ao bot").setMessage("Digite o API_TOKEN configurado no backend. Ele não fica embutido no APK.").setView(input).setNegativeButton("Cancelar", null).setPositiveButton("Salvar e conectar") { _, _ ->
-                val entered = input.text.toString().trim()
-                if (entered.isBlank()) { status.text = "● Senha não informada"; return@setPositiveButton }
-                getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("api_access", entered).apply()
-                request(method, path, body)
-            }.show()
+    private fun request(method:String,path:String,body:JSONObject,quiet:Boolean=false) {
+        if (busy) {
+            if (!quiet) appendLog("Aguarde a solicitação atual terminar.")
             return
         }
-        busy=true; status.text="●  Enviando pedido..."
+        val base = BuildConfig.API_BASE_URL.trimEnd('/')
+        val secret = getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_access", "")?.trim().orEmpty()
+        if (base.isBlank() || (!base.startsWith("https://") && !base.startsWith("http://"))) {
+            status.text = "● URL do servidor inválida"
+            return
+        }
+        if (secret.isBlank()) {
+            if (quiet) { stopStatusPolling(); return }
+            val input = EditText(this).apply {
+                hint = "Senha de acesso da API"
+                setSingleLine(true)
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Acesso ao bot")
+                .setMessage("Digite o API_TOKEN configurado no backend. Ele não fica embutido no APK.")
+                .setView(input)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Salvar e conectar") { _, _ ->
+                    val entered = input.text.toString().trim()
+                    if (entered.isBlank()) {
+                        status.text = "● Senha não informada"
+                        return@setPositiveButton
+                    }
+                    getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("api_access", entered).apply()
+                    request(method, path, body, quiet)
+                }.show()
+            return
+        }
+
+        busy = true
+        if (!quiet) status.text = "● Enviando pedido..."
         thread {
-            var conn:HttpURLConnection?=null
+            var conn: HttpURLConnection? = null
             try {
-                conn=(URL(base+path).openConnection() as HttpURLConnection).apply {
-                    requestMethod=method; connectTimeout=8000; readTimeout=10000
-                    setRequestProperty("Authorization","Bearer $secret"); setRequestProperty("Content-Type","application/json")
-                    if(method!="GET") { doOutput=true; outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) } }
+                conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    setRequestProperty("Authorization", "Bearer $secret")
+                    setRequestProperty("Content-Type", "application/json")
+                    if (method != "GET") {
+                        doOutput = true
+                        outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    }
                 }
-                val code=conn.responseCode
-                val stream=if(code in 200..299) conn.inputStream else conn.errorStream
-                val response=stream.bufferedReader().use { it.readText() }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 runOnUiThread {
                     if (code == 401 || code == 403) {
                         getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().remove("api_access").apply()
                         status.text = "● Token inválido — informe o token novo"
-                        appendLog("A API recusou o token (HTTP $code). O token salvo foi apagado; toque em uma ação para informar o novo.")
+                        if (!quiet) appendLog("A API recusou o token (HTTP $code); o token salvo foi apagado.")
+                        stopStatusPolling()
                         busy = false
                         conn?.disconnect()
                         return@runOnUiThread
                     }
+
                     val parsed = try { JSONObject(response) } catch (_: Exception) { JSONObject() }
-                    val state = parsed.optJSONObject("status")
-                    val connected = parsed.optBoolean("connected", state?.optBoolean("connected", false) ?: false)
-                    val serverError = parsed.optString("error").ifBlank { state?.optString("lastError", "") ?: "" }
+                    val state = parsed.optJSONObject("status") ?: parsed
+                    val connected = state.optBoolean("connected", parsed.optBoolean("connected", false))
+                    val serverError = parsed.optString("error").ifBlank { state.optString("lastError", "") }
+                    val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
+
                     status.text = when {
-                        code !in 200..299 -> "● Servidor/API com erro (HTTP $code)"
-                        (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao servidor"
+                        code !in 200..299 -> "● API com erro (HTTP $code)"
+                        (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao mundo"
                         (path == "/api/status" || path == "/api/connect") && serverError.isNotBlank() -> "● BOT OFF — $serverError"
-                        path == "/api/status" || path == "/api/connect" -> "● Tentando conectar / ainda offline"
+                        path == "/api/status" || path == "/api/connect" -> "● BOT — $connectionState"
                         else -> "● Resposta recebida"
                     }
-                    appendLog("HTTP $code $path\n$response")
-                    if (serverError.isNotBlank()) appendLog("ERRO: $serverError")
-                    if (path == "/api/connect" && code in 200..299) appendLog("Tentativa iniciada. Verifique o status em seguida.")
+
+                    if (!quiet) appendLog("HTTP $code $path\n$response")
+                    if (serverError.isNotBlank() && (!quiet || serverError != lastPolledError)) appendLog("ERRO: $serverError")
+                    if (quiet && (connectionState != lastPolledState || serverError != lastPolledError)) {
+                        appendLog("Estado do bot: $connectionState" + if (serverError.isNotBlank()) " — $serverError" else "")
+                    }
+                    if (quiet) {
+                        lastPolledState = connectionState
+                        lastPolledError = serverError
+                    }
+                    if (path == "/api/connect" && code in 200..299) {
+                        appendLog("Tentativa iniciada; acompanhando o estado real...")
+                        startStatusPolling()
+                    }
+                    if (path == "/api/disconnect" && code in 200..299) stopStatusPolling()
                 }
-            } catch(e:Exception) { runOnUiThread {
-                status.text="● FALHA DE CONEXÃO"
-                appendLog("ERRO DE REDE: ${e.message ?: "sem conexão"}")
-            } }
-            finally { conn?.disconnect(); runOnUiThread { busy=false } }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "● FALHA DE CONEXÃO"
+                    if (!quiet) appendLog("ERRO DE REDE: ${e.message ?: "sem conexão"}")
+                }
+            } finally {
+                conn?.disconnect()
+                runOnUiThread { busy = false }
+            }
         }
     }
 }
