@@ -1104,7 +1104,9 @@ class MainActivity : Activity() {
                     val parsed = try { JSONObject(response) } catch (_: Exception) { JSONObject() }
                     val state = parsed.optJSONObject("status") ?: parsed
                     val connected = state.optBoolean("connected", parsed.optBoolean("connected", false))
-                    val serverError = parsed.optString("error").ifBlank { state.optString("lastError", "") }
+                    val apiError = parsed.optString("error", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                    val stateError = state.optString("lastError", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                    val serverError = apiError.ifBlank { stateError }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
                     if (path == "/api/status" && state.has("autoReconnect") && ::autoReconnectSwitch.isInitialized) {
                         val enabled = state.optBoolean("autoReconnect", false)
