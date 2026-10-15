@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test"
+    "test": "node --test && node --check smoke/live-connect-smoke.js",
+    "smoke:live": "node smoke/live-connect-smoke.js"
   },
   "engines": {
     "node": ">=22"
