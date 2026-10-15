@@ -109,6 +109,15 @@ class MainActivity : Activity() {
         statusHandler.removeCallbacks(statusPoller)
     }
 
+    override fun onStop() {
+        // Ao sair da tela/colocar o app em segundo plano, limpa o histórico visível.
+        if (::logs.isInitialized) {
+            logs.text = "Aguardando tentativa de conexão..."
+            logs.visibility = View.GONE
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
         pendingMonitoringPermission = false
         stopStatusPolling()
