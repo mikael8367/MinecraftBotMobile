@@ -428,7 +428,19 @@ class MainActivity : Activity() {
             }
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
+                // Use the upstream Mineflayer engine for the default connection path.
+                // The experimental fork has produced protocol parsing errors on live servers.
+                val engineId = "official"
+                if (item.optString("engine", "mikael") != engineId) {
+                    val updated = savedBots()
+                    if (i in 0 until updated.length()) {
+                        updated.put(i, JSONObject(updated.getJSONObject(i).toString()).put("engine", engineId))
+                        saveBots(updated)
+                    }
+                    appendLog("Motor alterado para Mineflayer oficial para priorizar compatibilidade.")
+                }
                 appendLog("Bot selecionado: " + item.optString("name"))
+                appendLog("Conectando como Java; confira se o host e a porta ainda são os atuais do Aternos.")
                 lastShownAuthCode = ""
                 request("POST","/api/connect",JSONObject()
                     .put("host",item.optString("host"))
@@ -437,7 +449,7 @@ class MainActivity : Activity() {
                     .put("accountId",item.optString("accountId",""))
                     .put("auth",item.optString("auth","offline"))
                     .put("version",wanted)
-                    .put("engine",item.optString("engine","mikael")))
+                    .put("engine",engineId))
             }
             actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(3); rightMargin=dp(3) })
             val stop = Button(this).apply {
