@@ -173,12 +173,14 @@ class MainActivity : Activity() {
         for (i in 0 until items.length()) {
             val item = items.optJSONObject(i) ?: continue
             val card = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(Color.rgb(10,22,15),12); setPadding(dp(12),dp(10),dp(12),dp(10)) }
-            card.addView(text("🤖  " + item.optString("name", "Bot"),15,white,true))
-            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto"),11,muted,false).apply { setPadding(0,4,0,8) })
+            val botTitle = text("🤖  " + item.optString("name", "Bot") + "  ✎",15,white,true).apply {
+                isClickable = true
+                setOnClickListener { showBotSettingsDialog(i, item) }
+            }
+            card.addView(botTitle)
+            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "\\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
+            card.setOnClickListener { showBotSettingsDialog(i, item) }
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
-            val configure = Button(this).apply { text="CONFIGURAR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(43,61,49),9) }
-            configure.setOnClickListener { showBotSettingsDialog(i, item) }
-            actions.addView(configure,LinearLayout.LayoutParams(0,dp(42),1f))
             val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
