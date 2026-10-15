@@ -237,6 +237,62 @@ app.get('/health', (_req, res) => res.json({ ok: true }))
 app.get('/api/capabilities', (_req, res) => res.json({ ok: true, ...capabilities() }))
 app.get('/api/status', auth, (_req, res) => res.json({ ok: true, status: getStatus() }))
 
+app.post('/api/server-check', auth, async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {}
+  const host = String(body.host ?? '').trim()
+  const rawPort = body.port === undefined || body.port === null || body.port === '' ? '25565' : String(body.port)
+  if (!host || host.length > 253 || /[\\s/?#\\\\\\u0000-\\u001f]/.test(host) || host.includes('://')) {
+    return res.status(400).json({ ok: false, result: 'invalid', message: 'Informe um IP ou domínio válido, sem http:// ou https://.' })
+  }
+  if (!/^\\d{1,5}$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
+    return res.status(400).json({ ok: false, result: 'invalid', message: 'A porta deve estar entre 1 e 65535.' })
+  }
+  const port = Number(rawPort)
+  const dns = require('node:dns').promises
+  const net = require('node:net')
+  let address
+  try {
+    const resolved = await dns.lookup(host)
+    address = resolved.address
+  } catch (_) {
+    return res.status(200).json({
+      ok: true, result: 'not_found', domainResolves: false, portOpen: false,
+      host, port, message: 'O domínio não foi encontrado no DNS. Confira o endereço.'
+    })
+  }
+
+  const probe = await new Promise((resolve) => {
+    const socket = new net.Socket()
+    let finished = false
+    const finish = (result) => {
+      if (finished) return
+      finished = true
+      socket.destroy()
+      resolve(result)
+    }
+    socket.setTimeout(5000)
+    socket.once('connect', () => finish({ open: true }))
+    socket.once('timeout', () => finish({ open: false, reason: 'timeout' }))
+    socket.once('error', (error) => finish({ open: false, reason: error.code || 'error' }))
+    socket.connect(port, address)
+  })
+  if (probe.open) {
+    return res.json({
+      ok: true, result: 'online', domainResolves: true, portOpen: true,
+      host, port, address, message: 'O endereço existe no DNS e a porta está aceitando conexões. Isso indica que o servidor pode estar ligado.'
+    })
+  }
+  const timedOut = probe.reason === 'timeout'
+  return res.json({
+    ok: true, result: timedOut ? 'unknown' : 'offline', domainResolves: true, portOpen: false,
+    host, port, address, reason: probe.reason,
+    message: timedOut
+      ? 'O domínio existe, mas a verificação expirou. O servidor pode estar desligado ou bloqueando conexões.'
+      : 'O domínio existe, mas a porta não está aceitando conexões. O servidor pode estar desligado, ou o IP/porta podem estar incorretos.'
+  })
+})
+
+
 app.post('/api/connect', auth, (req, res) => {
   let options
   try {
