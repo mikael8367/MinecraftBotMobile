@@ -9,9 +9,13 @@ const { ValidationError, validateConnectionPayload } = require('./connection-val
 const app = express()
 app.use(express.json({ limit: '32kb' }))
 
-const PORT = Number(process.env.PORT || 10000)
+const rawPort = Number(process.env.PORT || 10000)
+const PORT = Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : 10000
 const API_TOKEN = process.env.API_TOKEN
-const CONNECT_TIMEOUT_MS = Number(process.env.CONNECT_TIMEOUT_MS || 30000)
+const rawConnectTimeout = Number(process.env.CONNECT_TIMEOUT_MS || 30000)
+const CONNECT_TIMEOUT_MS = Number.isFinite(rawConnectTimeout)
+  ? Math.max(10000, Math.min(rawConnectTimeout, 90000))
+  : 30000
 let bot = null
 let connectionTimer = null
 const controlTimers = new Map()
@@ -124,6 +128,14 @@ function requireConnectedBot () {
 }
 
 function pressControl (activeBot, action, durationMs) {
+  const opposite = ({ forward: 'back', back: 'forward', left: 'right', right: 'left' })[action]
+  if (opposite) {
+    const oppositeTimer = controlTimers.get(opposite)
+    if (oppositeTimer) clearTimeout(oppositeTimer)
+    controlTimers.delete(opposite)
+    try { activeBot.setControlState(opposite, false) } catch (_) {}
+  }
+
   const previousTimer = controlTimers.get(action)
   if (previousTimer) clearTimeout(previousTimer)
   activeBot.setControlState(action, true)
@@ -136,7 +148,6 @@ function pressControl (activeBot, action, durationMs) {
   if (typeof timer.unref === 'function') timer.unref()
   controlTimers.set(action, timer)
 }
-
 function executeAction (actionValue, payload = {}) {
   const activeBot = requireConnectedBot()
   const action = String(actionValue || '').trim().toLowerCase()
@@ -227,17 +238,22 @@ app.post('/api/connect', auth, (req, res) => {
     })
     bot = activeBot
 
-    // pathfinder's own world/physics stack is a separate dependency; don't load it
-    // for explicitly selected 26.x until compatibility with those protocols is verified.
-    const explicitlyModernProtocol = options.version.startsWith('26.')
-    if (!explicitlyModernProtocol) activeBot.loadPlugin(pathfinder)
-
+    // Resolve the server version first. Pathfinder uses a separate physics stack
+    // and is intentionally not loaded for modern protocols until compatibility is verified.
     activeBot.once('spawn', () => {
       if (bot !== activeBot) return
       clearConnectionTimer()
       const detectedVersion = String(activeBot.version || '')
       const modernProtocol = detectedVersion.startsWith('26.')
-      const canPathfind = Boolean(activeBot.pathfinder) && !modernProtocol
+      let canPathfind = false
+      if (!modernProtocol) {
+        try {
+          if (!activeBot.pathfinder) activeBot.loadPlugin(pathfinder)
+          canPathfind = Boolean(activeBot.pathfinder)
+        } catch (error) {
+          console.warn('[pathfinder:disabled]', String(error && (error.message || error)).slice(0, 300))
+        }
+      }
       updateBotInfo({
         connected: true,
         connectionState: 'connected',
@@ -245,12 +261,9 @@ app.post('/api/connect', auth, (req, res) => {
         pathfindingAvailable: canPathfind,
         lastError: null
       })
-      if (modernProtocol && activeBot.pathfinder) {
-        updateBotInfo({ pathfindingAvailable: false })
-      }
     })
 
-    activeBot.on('kicked', (reason) => {
+        activeBot.on('kicked', (reason) => {
       if (bot !== activeBot) return
       clearConnectionTimer()
       const detail = reasonText(reason)
@@ -305,7 +318,7 @@ app.post('/api/connect', auth, (req, res) => {
         lastError: 'Tempo limite de conexão excedido. Confira o IP, a porta, a versão e se o servidor está ligado.'
       })
       try { activeBot.quit('Tempo limite de conexão') } catch (_) {}
-    }, Math.max(10000, Math.min(CONNECT_TIMEOUT_MS, 90000)))
+    }, CONNECT_TIMEOUT_MS)
     if (typeof connectionTimer.unref === 'function') connectionTimer.unref()
 
     return res.status(202).json({
@@ -345,18 +358,19 @@ app.post('/api/action', auth, (req, res) => {
 
 app.post('/api/chat', auth, (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {}
-  const message = String(body.message || '').trim().toLocaleLowerCase('pt-BR').slice(0, 200)
+  const message = String(body.message || '').trim().slice(0, 200)
+  const normalizedMessage = message.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   if (!message) return res.status(400).json({ ok: false, error: 'Digite um comando.' })
 
   let action = null
-  if (/\b(parar|pare|stop|fica parado)\b/.test(message)) action = 'stop'
-  else if (/\b(pular|pule|jump)\b/.test(message)) action = 'jump'
-  else if (/\b(atacar|ataque|bater)\b/.test(message)) action = 'attack'
-  else if (/\b(frente|andar|avançar|avancar|andar para frente)\b/.test(message)) action = 'forward'
-  else if (/\b(ré|re|voltar|trás|tras)\b/.test(message)) action = 'back'
-  else if (/\b(esquerda)\b/.test(message)) action = 'left'
-  else if (/\b(direita)\b/.test(message)) action = 'right'
-  else if (/\b(correr|sprint)\b/.test(message)) action = 'sprint'
+  if (/\b(parar|pare|stop|fica parado)\b/.test(normalizedMessage)) action = 'stop'
+  else if (/\b(pular|pule|jump)\b/.test(normalizedMessage)) action = 'jump'
+  else if (/\b(atacar|ataque|bater)\b/.test(normalizedMessage)) action = 'attack'
+  else if (/\b(frente|andar|avancar|andar para frente)\b/.test(normalizedMessage)) action = 'forward'
+  else if (/\b(re|voltar|tras)\b/.test(normalizedMessage)) action = 'back'
+  else if (/\b(esquerda)\b/.test(normalizedMessage)) action = 'left'
+  else if (/\b(direita)\b/.test(normalizedMessage)) action = 'right'
+  else if (/\b(correr|sprint)\b/.test(normalizedMessage)) action = 'sprint'
 
   if (!action) {
     return res.status(400).json({
