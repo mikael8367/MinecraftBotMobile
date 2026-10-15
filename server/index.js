@@ -231,6 +231,27 @@ function executeAction (actionValue, payload = {}) {
     return { ok: true, message: 'Movimento e caminho interrompidos.' }
   }
 
+  if (action === 'sneak') {
+    pressControl(activeBot, 'sneak', 1200)
+    return { ok: true, message: 'Agachar ativado por 1,2 segundo.' }
+  }
+
+  if (action === 'goto') {
+    if (!botInfo.pathfindingAvailable || !activeBot.pathfinder) {
+      throw new ValidationError('Ir até coordenadas está indisponível nesta versão do Minecraft.', 501)
+    }
+    const x = Number(payload.x)
+    const y = Number(payload.y)
+    const z = Number(payload.z)
+    if (![x, y, z].every(Number.isFinite) || Math.abs(x) > 30000000 || Math.abs(z) > 30000000 || y < -2048 || y > 2048) {
+      throw new ValidationError('Informe coordenadas numéricas dentro dos limites do mundo.')
+    }
+    try { activeBot.pathfinder.setGoal(new goals.GoalBlock(Math.floor(x), Math.floor(y), Math.floor(z))) } catch (error) {
+      throw new ValidationError('Não foi possível calcular o caminho para essas coordenadas: ' + String(error && (error.message || error)).slice(0, 180), 409)
+    }
+    return { ok: true, message: 'Caminho iniciado para ' + Math.floor(x) + ', ' + Math.floor(y) + ', ' + Math.floor(z) }
+  }
+
   if (action === 'attack') {
     const position = activeBot.entity.position
     const target = activeBot.nearestEntity((entity) =>
@@ -543,6 +564,21 @@ app.post('/api/action', auth, (req, res) => {
     const message = String(error && (error.message || error) || 'Falha ao executar ação').slice(0, 500)
     if (statusCode >= 500) console.error('[action:error]', message)
     return res.status(statusCode).json({ ok: false, error: message })
+  }
+})
+
+app.post('/api/chat/send', auth, (req, res) => {
+  try {
+    const activeBot = requireConnectedBot()
+    const message = String(req.body && req.body.message != null ? req.body.message : '').trim()
+    if (!message || message.length > 256 || /[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/.test(message)) {
+      throw new ValidationError('A mensagem deve ter de 1 a 256 caracteres.')
+    }
+    activeBot.chat(message)
+    return res.json({ ok: true, message: 'Mensagem enviada ao chat.' })
+  } catch (error) {
+    const statusCode = error instanceof ValidationError ? error.statusCode : 500
+    return res.status(statusCode).json({ ok: false, error: String(error && (error.message || error) || 'Falha ao enviar mensagem').slice(0, 300) })
   }
 })
 
