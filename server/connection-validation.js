@@ -27,7 +27,20 @@ function validateConnectionPayload (body, engines) {
 
   const username = String(body.username ?? 'MikaelBot').trim()
   if (!/^[A-Za-z0-9_]{1,16}$/.test(username)) {
-    throw new ValidationError('O nome offline deve ter de 1 a 16 caracteres: letras, números ou _.')
+    throw new ValidationError('O nome/identificador offline deve ter de 1 a 16 caracteres: letras, números ou _.')
+  }
+
+  const auth = String(body.auth ?? 'offline').trim().toLowerCase()
+  if (!['offline', 'microsoft'].includes(auth)) {
+    throw new ValidationError('Autenticação inválida. Escolha Offline ou Microsoft.')
+  }
+
+  let accountId = null
+  if (auth === 'microsoft') {
+    accountId = String(body.accountId ?? '').trim()
+    if (!/^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$/.test(accountId)) {
+      throw new ValidationError('Informe um identificador da conta Microsoft (e-mail ou apelido, sem espaços).')
+    }
   }
 
   const requestedEngine = String(body.engine ?? 'mikael').trim().toLowerCase()
@@ -46,6 +59,8 @@ function validateConnectionPayload (body, engines) {
     host,
     port,
     username,
+    accountId,
+    auth,
     version,
     engine: requestedEngine
   }
