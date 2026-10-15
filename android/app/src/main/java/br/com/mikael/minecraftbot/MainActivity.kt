@@ -178,7 +178,7 @@ class MainActivity : Activity() {
                 setOnClickListener { showBotSettingsDialog(i, item) }
             }
             card.addView(botTitle)
-            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "\\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
+            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer normal" else "Mineflayer Mikael experimental") + "\\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
             card.setOnClickListener { showBotSettingsDialog(i, item) }
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
             val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
