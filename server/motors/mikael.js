@@ -27,10 +27,9 @@ function createBot (options = {}) {
     logErrors: false
   })
 
-  // Current @wp2508/mineflayer release contains legacy action IDs and flat entity
-  // movement readers that do not match 26.3's wire shapes. Apply narrow runtime
-  // shims only when 26.3/protocol 777 is selected or negotiated.
-  installMikaelCompatibility(bot, requested)
+  // Install compatibility adapters at client creation; each shim checks the
+  // negotiated protocol/version at packet time, never only the requested version.
+  installMikaelCompatibility(bot)
   return bot
 }
 
