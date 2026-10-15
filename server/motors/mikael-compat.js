@@ -25,14 +25,44 @@ function installMikaelCompatibility (bot) {
   const patches = ['26.3-player-action-ids', '26.3-entity-movement-shapes']
   const originalEmit = client.emit
   const originalWrite = client.write
+  const positionBearingPackets = new Set([
+    'position',
+    'position_look',
+    'move_player_pos',
+    'move_player_pos_rot'
+  ])
+  let positionNeedsTickEnd = false
+  let tickEndFallbackLogged = false
 
-  // In 26.3 the enum inserted CHANGE_DESTROY_DIRECTION at id 1.
-  // Every legacy action ID > 0 shifts up by one (abort 1→2, finish 2→3,
-  // release-use-item 5→6, swap-hand 6→7).
+  // 26.3 tracks whether it has received a position-bearing movement packet in
+  // the current client tick. If another arrives before tick_end, Paper rejects
+  // it with invalid_player_movement. The fork sends tick_end in its physics loop,
+  // but that loop can early-return before tick_end (e.g. during chunk/teleport
+  // transitions). Add a safety boundary only when the normal packet stream
+  // hasn't already closed the previous movement tick.
   client.write = function (packetName, params, ...rest) {
+    const protocol26_3 = is26_3(bot)
+
+    if (protocol26_3 && packetName === 'tick_end') {
+      positionNeedsTickEnd = false
+      return originalWrite.call(this, packetName, params, ...rest)
+    }
+
+    if (protocol26_3 && positionBearingPackets.has(packetName) && positionNeedsTickEnd) {
+      if (!tickEndFallbackLogged) {
+        tickEndFallbackLogged = true
+        console.warn('[mikael-compat] 26.3: inserido tick_end de segurança antes de um pacote de movimento adicional.')
+      }
+      originalWrite.call(this, 'tick_end', {})
+      positionNeedsTickEnd = false
+    }
+
+    // In 26.3 the enum inserted CHANGE_DESTROY_DIRECTION at id 1.
+    // Every legacy action ID > 0 shifts up by one (abort 1→2, finish 2→3,
+    // release-use-item 5→6, swap-hand 6→7).
     if (
       packetName === 'block_dig' &&
-      is26_3(bot) &&
+      protocol26_3 &&
       params &&
       Number.isInteger(params.status) &&
       params.status >= 1 &&
@@ -40,7 +70,12 @@ function installMikaelCompatibility (bot) {
     ) {
       params = { ...params, status: params.status + 1 }
     }
-    return originalWrite.call(this, packetName, params, ...rest)
+
+    const result = originalWrite.call(this, packetName, params, ...rest)
+    if (protocol26_3 && positionBearingPackets.has(packetName)) {
+      positionNeedsTickEnd = true
+    }
+    return result
   }
 
   // Convert the 26.3 packet shapes to the flat fields expected by the fork's
