@@ -151,10 +151,16 @@ function pressControl (activeBot, action, durationMs) {
 function executeAction (actionValue, payload = {}) {
   const activeBot = requireConnectedBot()
   const action = String(actionValue || '').trim().toLowerCase()
-  const controls = new Set(['forward', 'back', 'left', 'right', 'jump', 'sprint'])
+  const controls = new Set(['forward', 'back', 'left', 'right', 'jump'])
   if (controls.has(action)) {
-    pressControl(activeBot, action, action === 'sprint' ? 1200 : 700)
+    pressControl(activeBot, action, 700)
     return { ok: true, message: 'Ação executada: ' + action }
+  }
+  if (action === 'sprint') {
+    // Sprint only toggles run speed: the bot must also be moving forward.
+    pressControl(activeBot, 'forward', 1200)
+    pressControl(activeBot, 'sprint', 1200)
+    return { ok: true, message: 'Corrida iniciada por 1,2 segundo.' }
   }
 
   if (action === 'stop') {
@@ -292,9 +298,11 @@ app.post('/api/connect', auth, (req, res) => {
     })
 
     activeBot.on('end', (reason) => {
+      // A disconnected old bot can emit "end" after a new bot has been assigned.
+      // Never let that stale event clear the new bot's timeout/control timers.
+      if (bot !== activeBot) return
       clearConnectionTimer()
       clearControlTimers()
-      if (bot !== activeBot) return
       const endedState = botInfo.connectionState
       const detail = reasonText(reason)
       let nextState = endedState
