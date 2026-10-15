@@ -1,6 +1,7 @@
 package br.com.mikael.minecraftbot
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
@@ -196,9 +197,18 @@ class MainActivity : Activity() {
 
     private fun request(method:String,path:String,body:JSONObject) {
         val base=BuildConfig.API_BASE_URL
-        val secret=BuildConfig.API_TOKEN.trim()
+        val secret=getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_access", "")?.trim().orEmpty()
         if(base.isBlank()||(!base.startsWith("https://")&&!base.startsWith("http://"))) { status.text="●  URL do servidor inválida"; return }
-        if(secret.isBlank()) { status.text="●  Token não incluído no APK. Configure o segredo API_TOKEN no GitHub."; return }
+        if(secret.isBlank()) {
+            val input = EditText(this).apply { hint = "Senha de acesso da API"; setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
+            AlertDialog.Builder(this).setTitle("Acesso ao bot").setMessage("Digite o API_TOKEN configurado no backend. Ele não fica embutido no APK.").setView(input).setNegativeButton("Cancelar", null).setPositiveButton("Salvar e conectar") { _, _ ->
+                val entered = input.text.toString().trim()
+                if (entered.isBlank()) { status.text = "● Senha não informada"; return@setPositiveButton }
+                getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("api_access", entered).apply()
+                request(method, path, body)
+            }.show()
+            return
+        }
         busy=true; status.text="●  Enviando pedido..."
         thread {
             var conn:HttpURLConnection?=null
