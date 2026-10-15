@@ -71,6 +71,7 @@ class MainActivity : Activity() {
         root.addView(pages,LinearLayout.LayoutParams(-1,0,1f))
         buildConnectPage(); buildControlPage(); buildAiPage()
         showTab(0)
+        loadMinecraftVersions()
     }
 
     private val pageViews = mutableListOf<View>()
@@ -86,11 +87,64 @@ class MainActivity : Activity() {
         username=field(p,"Nome do bot","MikaelBot")
         p.addView(text("VERSÃO DO MINECRAFT",10,muted,true).apply { setPadding(0,10,0,4) })
         version=Spinner(this)
-        version.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("auto","1.8","1.8.8","1.8.9","1.9","1.9.2","1.9.4","1.10","1.10.2","1.11","1.11.2","1.12","1.12.1","1.12.2","1.13","1.13.1","1.13.2","1.14","1.14.1","1.14.2","1.14.3","1.14.4","1.15","1.15.1","1.15.2","1.16","1.16.1","1.16.2","1.16.3","1.16.4","1.16.5","1.17","1.17.1","1.18","1.18.1","1.18.2","1.19","1.19.1","1.19.2","1.19.3","1.19.4","1.20","1.20.1","1.20.2","1.20.3","1.20.4","1.20.5","1.20.6","1.21","1.21.1","1.21.2","1.21.3","1.21.4","1.21.5","1.21.6","1.21.7","1.21.8"))
+        version.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item, mutableListOf("auto","Carregando versões..."))
         p.addView(version)
         button(p,"CONECTAR BOT",true) { request("POST","/api/connect",JSONObject().put("host",host.text.toString().trim()).put("port",port.text.toString().toIntOrNull()?:25565).put("username",username.text.toString().trim()).put("version",version.selectedItem.toString())) }
         button(p,"ATUALIZAR STATUS",false) { request("GET","/api/status",JSONObject()) }
     }
+
+    private fun loadMinecraftVersions() {
+        thread {
+            try {
+                val connection = (URL("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json").openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10000
+                    readTimeout = 15000
+                    requestMethod = "GET"
+                }
+                val json = connection.inputStream.bufferedReader().use { it.readText() }
+                connection.disconnect()
+                val versionsJson = JSONObject(json).getJSONArray("versions")
+                val releases = mutableListOf<String>()
+                val snapshots = mutableListOf<String>()
+                val betas = mutableListOf<String>()
+                val alphas = mutableListOf<String>()
+                for (i in 0 until versionsJson.length()) {
+                    val item = versionsJson.getJSONObject(i)
+                    val id = item.optString("id")
+                    when (item.optString("type")) {
+                        "release" -> releases.add(id)
+                        "snapshot" -> snapshots.add(id)
+                        "old_beta" -> betas.add(id)
+                        "old_alpha" -> alphas.add(id)
+                    }
+                }
+                val all = mutableListOf("auto")
+                all.addAll(releases)
+                if (snapshots.isNotEmpty()) { all.add("── Snapshots ──"); all.addAll(snapshots) }
+                if (betas.isNotEmpty()) { all.add("── Betas antigas ──"); all.addAll(betas) }
+                if (alphas.isNotEmpty()) { all.add("── Alphas antigas ──"); all.addAll(alphas) }
+                runOnUiThread {
+                    version.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, all)
+                    val saved = getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("mc_version", "auto") ?: "auto"
+                    val position = all.indexOf(saved)
+                    if (position >= 0) version.setSelection(position)
+                    version.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                        override fun onNothingSelected(parent: AdapterView<*>?) {}
+                        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                            val selected = all[position]
+                            if (!selected.startsWith("──")) getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("mc_version", selected).apply()
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread {
+                    val fallback = listOf("auto","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.2","1.21.1","1.21","1.20.6","1.20.4","1.20.1","1.19.4","1.18.2","1.16.5","1.12.2","1.8.9")
+                    version.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, fallback)
+                }
+            }
+        }
+    }
+
     private fun buildControlPage() {
         val p=page("Controle rápido","Cada toque envia uma ação curta ao bot.")
         val grid=GridLayout(this).apply { columnCount=3; rowCount=3 }
