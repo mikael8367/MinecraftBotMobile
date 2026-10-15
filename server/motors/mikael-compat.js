@@ -3,24 +3,11 @@
 // Compatibility shims for the @wp2508/mineflayer package pinned by this app.
 // Only patch packets after the negotiated protocol/version identifies Java 26.3.
 function is26_3 (bot) {
-  const client = bot && bot._client
-  const protocol = (bot && bot.protocolVersion != null)
-    ? bot.protocolVersion
-    : (client && client.protocolVersion)
-
-  // A valid negotiated protocol number is stronger evidence than requested version.
-  // Never activate 26.3 wire changes only because the user selected "26.3".
-  const numericProtocol = Number(protocol)
-  if (protocol !== undefined && protocol !== null && protocol !== '' &&
-      Number.isInteger(numericProtocol) && numericProtocol > 0) {
-    return numericProtocol === 777
-  }
-
-  const versions = [bot && bot.version, client && client.version]
-    .filter(version => version !== undefined && version !== null && version !== false && String(version) !== '')
-    .map(String)
-
-  return versions.length > 0 && versions.every(version => version === '26.3')
+  // The bot's protocolVersion is set by the fork only after version negotiation.
+  // Never infer a wire protocol from options.version or client.version: those
+  // fields can contain the requested version before the server answers.
+  const protocol = bot && bot.protocolVersion
+  return Number.isInteger(protocol) && protocol === 777
 }
 
 function finite (value, fallback = 0) {
