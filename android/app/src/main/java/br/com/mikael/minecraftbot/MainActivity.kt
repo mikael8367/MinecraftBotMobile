@@ -67,6 +67,7 @@ class MainActivity : Activity() {
     private var pollingStatus = false
     private var lastPolledState = ""
     private var lastPolledError = ""
+    private var currentBotConnected = false
     private val statusPoller = object : Runnable {
         override fun run() {
             if (!pollingStatus) return
@@ -380,7 +381,11 @@ class MainActivity : Activity() {
             card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer oficial" else "Mikael experimental") + " • " + (if (item.optString("auth","offline") == "microsoft") "Microsoft" else "Offline") + "\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
             card.setOnClickListener { showBotSettingsDialog(i, item) }
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
-            val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
+            val use = Button(this).apply {
+                text="LIGAR"; isAllCaps=false; textSize=10f
+                setTextColor(if (currentBotConnected) muted else bg)
+                background=rounded(if (currentBotConnected) Color.rgb(31,65,43) else green,9)
+            }
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
                 appendLog("Bot selecionado: " + item.optString("name"))
@@ -394,7 +399,21 @@ class MainActivity : Activity() {
                     .put("version",wanted)
                     .put("engine",item.optString("engine","mikael")))
             }
-            actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
+            actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(3); rightMargin=dp(3) })
+            val stop = Button(this).apply {
+                text="DESLIGAR"; isAllCaps=false; textSize=10f
+                setTextColor(if (currentBotConnected) white else muted)
+                background=rounded(if (currentBotConnected) Color.rgb(111,48,48) else Color.rgb(65,39,39),9)
+            }
+            stop.setOnClickListener {
+                AlertDialog.Builder(this).setTitle("Desligar bot?")
+                    .setMessage("O bot conectado será desconectado.")
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("DESLIGAR") { _, _ ->
+                        request("POST", "/api/disconnect", JSONObject())
+                    }.show()
+            }
+            actions.addView(stop,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(3); rightMargin=dp(3) })
             val check = Button(this).apply { text="VERIFICAR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(43,61,49),9) }
             check.setOnClickListener {
                 appendLog("Verificando servidor: " + item.optString("host") + ":" + item.optInt("port",25565))
@@ -1110,6 +1129,11 @@ class MainActivity : Activity() {
                     val errorDetails = state.optString("errorDetails", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                     val serverError = apiError.ifBlank { stateError }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
+                    val nowConnected = connected && connectionState == "connected"
+                    if (currentBotConnected != nowConnected) {
+                        currentBotConnected = nowConnected
+                        refreshBotList()
+                    }
                     if (path == "/api/status" && state.has("autoReconnect") && ::autoReconnectSwitch.isInitialized) {
                         val enabled = state.optBoolean("autoReconnect", false)
                         if (autoReconnectSwitch.isChecked != enabled) {
