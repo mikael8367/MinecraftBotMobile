@@ -452,11 +452,28 @@ class MainActivity : Activity() {
         val configScroll = ScrollView(this).apply { isFillViewport = true }
         val config = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(8)) }
         configScroll.addView(config)
-        fun label(value: String) { config.addView(text(value.uppercase(), 10, muted, true).apply { setPadding(0, dp(9), 0, dp(4)) }) }
+        fun section(title: String, subtitle: String? = null): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(Color.rgb(13, 27, 18), 14)
+                setPadding(dp(12), dp(10), dp(12), dp(12))
+            }
+            card.addView(text(title, 11, green, true).apply { setPadding(0, 0, 0, dp(3)) })
+            if (subtitle != null) card.addView(text(subtitle, 10, muted, false).apply { setPadding(0, 0, 0, dp(7)) })
+            config.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+            return card
+        }
+        fun fieldLabel(parent: LinearLayout, value: String) {
+            parent.addView(text(value.uppercase(), 9, muted, true).apply { setPadding(0, dp(7), 0, dp(3)) })
+        }
+        fun addField(parent: LinearLayout, caption: String, view: View) {
+            fieldLabel(parent, caption)
+            parent.addView(view, LinearLayout.LayoutParams(-1, dp(46)))
+        }
         val botName = EditText(this).apply { hint = "Nome do bot"; setSingleLine(true); setText(item.optString("name")); styleBotInput(this) }
         val serverIp = EditText(this).apply { hint = "IP ou domínio"; setSingleLine(true); setText(item.optString("host")); styleBotInput(this) }
         val serverPort = EditText(this).apply { hint = "Porta"; setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port", "25565")); styleBotInput(this) }
-        val skinName = EditText(this).apply { hint = "Nome de jogador para referência de skin"; setSingleLine(true); setText(item.optString("skinName", "")); styleBotInput(this) }
+        val skinName = EditText(this).apply { hint = "Nome de jogador (opcional)"; setSingleLine(true); setText(item.optString("skinName", "")); styleBotInput(this) }
         val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
         val engine = Spinner(this).apply { styleBotSpinner(this) }
         val authMode = Spinner(this).apply { styleBotSpinner(this) }
@@ -468,21 +485,35 @@ class MainActivity : Activity() {
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
         configureVersionSpinner(mcVersion, selectedEngine, item.optString("version", "auto"))
         watchEngineSelection(engine, mcVersion)
-        label("Nome do bot"); config.addView(botName)
-        label("IP / domínio"); config.addView(serverIp)
-        label("Porta"); config.addView(serverPort)
-        label("Skin"); config.addView(skinName)
-        config.addView(text("O nome de skin é uma referência. A aparência real depende do login e dos recursos/plugins do servidor; não é possível forçar qualquer skin em todo servidor.", 11, muted, false).apply { setPadding(0, dp(4), 0, dp(4)) })
-        label("Versão do Minecraft"); config.addView(mcVersion)
-        label("Motor de conexão"); config.addView(engine)
-        label("Autenticação"); config.addView(authMode)
-        label("Identificador Microsoft (não é a senha)"); config.addView(accountId)
-        config.addView(text("Nunca informe sua senha aqui. No modo Microsoft, conclua a autorização oficial quando o app mostrar o código.", 11, muted, false).apply { setPadding(0, dp(5), 0, dp(6)) })
 
-        val reconnectRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = rounded(Color.rgb(14, 29, 19), 12); setPadding(dp(12), dp(10), dp(8), dp(10)) }
+        val identityCard = section("IDENTIDADE", "Como o bot será identificado")
+        addField(identityCard, "Nome do bot", botName)
+        addField(identityCard, "Skin • nome de referência", skinName)
+        identityCard.addView(text("A aparência real depende da autenticação e do suporte do servidor.", 10, muted, false).apply { setPadding(0, dp(5), 0, 0) })
+
+        val serverCard = section("SERVIDOR", "Endereço de conexão")
+        addField(serverCard, "IP / domínio", serverIp)
+        fieldLabel(serverCard, "PORTA")
+        serverCard.addView(serverPort, LinearLayout.LayoutParams(-1, dp(46)))
+
+        val gameCard = section("JOGO", "Compatibilidade e conexão")
+        addField(gameCard, "Versão do Minecraft", mcVersion)
+        addField(gameCard, "Motor de conexão", engine)
+
+        val accountCard = section("CONTA", "Escolha como o bot autentica")
+        addField(accountCard, "Método de autenticação", authMode)
+        addField(accountCard, "Identificador Microsoft", accountId)
+        accountCard.addView(text("Não coloque sua senha aqui. A autorização Microsoft deve ser concluída pelo fluxo oficial.", 10, muted, false).apply { setPadding(0, dp(5), 0, 0) })
+
+        val reconnectRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(Color.rgb(13, 27, 18), 14)
+            setPadding(dp(12), dp(10), dp(8), dp(10))
+        }
         val reconnectTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        reconnectTexts.addView(text("Reconectar automaticamente", 13, white, true))
-        reconnectTexts.addView(text("Tentar ligar novamente após uma queda.", 10, muted, false).apply { setPadding(0, dp(3), 0, 0) })
+        reconnectTexts.addView(text("Reconexão automática", 13, white, true))
+        reconnectTexts.addView(text("Tentar conectar novamente se cair.", 10, muted, false).apply { setPadding(0, dp(3), 0, 0) })
         reconnectRow.addView(reconnectTexts, LinearLayout.LayoutParams(0, -2, 1f))
         val reconnect = Switch(this).apply { isChecked = getSharedPreferences("minecraftbot", MODE_PRIVATE).getBoolean("auto_reconnect", false) }
         reconnectRow.addView(reconnect)
@@ -490,7 +521,7 @@ class MainActivity : Activity() {
             getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", enabled).apply()
             request("POST", "/api/settings/auto-reconnect", JSONObject().put("enabled", enabled))
         }
-        config.addView(reconnectRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        config.addView(reconnectRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
         val manage = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val startBot = Button(this).apply { text = "▶ INICIAR BOT"; isAllCaps = false; textSize = 11f; setTextColor(bg); background = rounded(green, 10) }
