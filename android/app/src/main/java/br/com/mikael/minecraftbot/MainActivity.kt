@@ -1032,8 +1032,9 @@ class MainActivity : Activity() {
 
     private fun appendLog(message:String) {
         if (!::logs.isInitialized) return
-        val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-        logs.text = (logs.text.toString() + "\n[" + stamp + "] " + message).takeLast(12000)
+        val stamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+        // Guarda mais contexto para que erros anteriores não desapareçam tão rapidamente.
+        logs.text = (logs.text.toString() + "\n[" + stamp + "] " + message).takeLast(50000)
     }
 
     private fun request(method:String,path:String,body:JSONObject,quiet:Boolean=false) {
@@ -1106,6 +1107,7 @@ class MainActivity : Activity() {
                     val connected = state.optBoolean("connected", parsed.optBoolean("connected", false))
                     val apiError = parsed.optString("error", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                     val stateError = state.optString("lastError", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                    val errorDetails = state.optString("errorDetails", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                     val serverError = apiError.ifBlank { stateError }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
                     if (path == "/api/status" && state.has("autoReconnect") && ::autoReconnectSwitch.isInitialized) {
@@ -1149,9 +1151,9 @@ class MainActivity : Activity() {
                         else -> "● Resposta recebida"
                     }
 
-                    if (!quiet) {
-                        appendLog("HTTP $code $path")
-                        if (response.isNotBlank()) appendLog("Resposta da API: $response")
+                    if (!quiet || code !in 200..299) {
+                        appendLog("HTTP $code $path • resposta com ${response.length} caracteres")
+                        if (response.isNotBlank()) appendLog("CORPO COMPLETO DA RESPOSTA API:\n$response")
                     }
                     if (path == "/api/connect" && code in 200..299) {
                         val host = state.optString("host", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
@@ -1164,6 +1166,7 @@ class MainActivity : Activity() {
                     }
                     if (serverError.isNotBlank() && (!quiet || serverError != lastPolledError)) {
                         appendLog("ERRO DO BACKEND [$connectionState]: $serverError")
+                        if (errorDetails.isNotBlank()) appendLog("RASTREIO / DETALHES TÉCNICOS DO BACKEND:\n$errorDetails")
                     }
                     if (quiet && (connectionState != lastPolledState || serverError != lastPolledError)) {
                         val serverVersion = state.optString("serverVersion", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
@@ -1194,7 +1197,10 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     status.text = "● FALHA DE CONEXÃO"
-                    if (!quiet) appendLog("ERRO DE REDE: ${e.message ?: "sem conexão"}")
+                    if (!quiet || e !is java.net.SocketTimeoutException) {
+                        appendLog("ERRO DE REDE: tipo=${e.javaClass.name} • mensagem=${e.message ?: "sem mensagem"}")
+                        appendLog("RASTREIO COMPLETO DO ERRO DE REDE:\n${android.util.Log.getStackTraceString(e)}")
+                    }
                 }
             } finally {
                 conn?.disconnect()
