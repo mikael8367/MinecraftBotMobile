@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var botListContainer: LinearLayout
     private lateinit var monitoringSwitch: Switch
     private var pendingMonitoringPermission = false
+    private var lastShownAuthCode = ""
 
     // Fallback metadata from the exact Mineflayer package testedVersions lists.
     // On startup these are refreshed from /api/capabilities, so UI and backend agree.
@@ -328,7 +329,15 @@ class MainActivity : Activity() {
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
                 appendLog("Bot selecionado: " + item.optString("name"))
-                request("POST","/api/connect",JSONObject().put("host",item.optString("host")).put("port",item.optInt("port",25565)).put("username",item.optString("name")).put("version",wanted).put("engine",item.optString("engine","mikael")))
+                lastShownAuthCode = ""
+                request("POST","/api/connect",JSONObject()
+                    .put("host",item.optString("host"))
+                    .put("port",item.optInt("port",25565))
+                    .put("username",item.optString("name"))
+                    .put("accountId",item.optString("accountId",""))
+                    .put("auth",item.optString("auth","offline"))
+                    .put("version",wanted)
+                    .put("engine",item.optString("engine","mikael")))
             }
             actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
             val delete = Button(this).apply { text="EXCLUIR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(65,43,43),9) }
@@ -350,7 +359,14 @@ class MainActivity : Activity() {
         val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")) }
         val mcVersion = Spinner(this)
         val engine = Spinner(this)
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        val authMode = Spinner(this)
+        authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
+        authMode.setSelection(if (item.optString("auth","offline") == "microsoft") 1 else 0)
+        val accountId = EditText(this).apply {
+            setSingleLine(true)
+            hint = "E-mail ou identificador da conta Microsoft"
+            setText(item.optString("accountId",""))
+        }
         val selectedEngine = item.optString("engine","mikael")
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
         configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
@@ -359,6 +375,9 @@ class MainActivity : Activity() {
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
+        form.addView(text("AUTENTICAÇÃO",10,muted,true)); form.addView(authMode)
+        form.addView(text("IDENTIFICADOR MICROSOFT (não é a senha)",10,muted,true)); form.addView(accountId)
+        form.addView(text("No modo Microsoft, o app mostra um código oficial de autorização. Não informe nem salve sua senha aqui.",11,muted,false))
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("As versões listadas vêm dos metadados da biblioteca; este app ainda não testou todas em servidores reais.",11,muted,false))
@@ -371,13 +390,19 @@ class MainActivity : Activity() {
                 val p = serverPort.text.toString().toIntOrNull()
                 val v = mcVersion.selectedItem?.toString() ?: "auto"
                 val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
+                val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+                val accountValue = accountId.text.toString().trim()
                 if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
                     Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
+                if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
+                    Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
                 val items = savedBots()
                 if (index !in 0 until items.length()) return@setOnClickListener
-                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId))
+                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
                 saveBots(items)
                 Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
@@ -393,6 +418,12 @@ class MainActivity : Activity() {
         val serverPort = EditText(this).apply { hint="Porta (ex.: 25565)"; setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_NUMBER }
         val mcVersion = Spinner(this)
         val engine = Spinner(this)
+        val authMode = Spinner(this)
+        authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
+        val accountId = EditText(this).apply {
+            setSingleLine(true)
+            hint = "E-mail ou identificador da conta Microsoft"
+        }
         engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
         configureVersionSpinner(mcVersion, "mikael", "26.3")
         watchEngineSelection(engine, mcVersion)
@@ -400,6 +431,9 @@ class MainActivity : Activity() {
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
+        form.addView(text("AUTENTICAÇÃO",10,muted,true)); form.addView(authMode)
+        form.addView(text("IDENTIFICADOR MICROSOFT (não é a senha)",10,muted,true)); form.addView(accountId)
+        form.addView(text("No modo Microsoft, o app mostra um código oficial de autorização. Não informe nem salve sua senha aqui.",11,muted,false))
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("A seleção inicial é 26.3 + Mikael experimental. A lista vem do motor, mas o servidor real precisa ser testado.",11,muted,false))
@@ -412,12 +446,18 @@ class MainActivity : Activity() {
                 val p = serverPort.text.toString().toIntOrNull()
                 val v = mcVersion.selectedItem?.toString() ?: "auto"
                 val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
+                val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+                val accountValue = accountId.text.toString().trim()
                 if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
                     Toast.makeText(this,"Preencha nome, IP e uma porta válida.",Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
+                if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
+                    Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
                 val items = savedBots()
-                items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId))
+                items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
                 saveBots(items)
                 Toast.makeText(this,"Bot salvo!",Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
