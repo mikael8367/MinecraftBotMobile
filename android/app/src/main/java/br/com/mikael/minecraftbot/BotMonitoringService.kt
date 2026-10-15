@@ -103,32 +103,63 @@ class BotMonitoringService : Service() {
 
                 val root = JSONObject(response)
                 val info = root.optJSONObject("status") ?: root
-                val connected = info.optBoolean("connected", false)
-                val state = info.optString("connectionState", if (connected) "connected" else "disconnected")
-                val username = info.optString("username", "Bot").ifBlank { "Bot" }
-                val host = info.optString("host", "").trim()
-                val port = info.optInt("port", 25565)
-                val version = info.optString("serverVersion", info.optString("version", "")).trim()
-                val engine = info.optString("engine", "").trim()
-                val error = info.optString("lastError", "").trim()
 
-                if (connected) {
-                    val server = if (host.isNotBlank()) "$host:$port" else "servidor conectado"
-                    val detail = buildString {
-                        append("$username • $server")
-                        if (version.isNotBlank()) append(" • Minecraft $version")
-                        if (engine.isNotBlank()) append(" • $engine")
+                // Newer backends may expose several simultaneous bots in "bots".
+                // The current backend returns a single status object, handled below.
+                val onlineBots = mutableListOf<String>()
+                val botArray = root.optJSONArray("bots") ?: info.optJSONArray("bots")
+                if (botArray != null) {
+                    for (i in 0 until botArray.length()) {
+                        val item = botArray.optJSONObject(i) ?: continue
+                        if (!item.optBoolean("connected", false)) continue
+                        val name = item.optString("username", "Bot").ifBlank { "Bot" }
+                        val host = item.optString("host", "").trim()
+                        val port = item.optInt("port", 25565)
+                        val version = item.optString("serverVersion", item.optString("version", "")).trim()
+                        val server = if (host.isNotBlank()) "$host:$port" else "servidor conectado"
+                        onlineBots.add(buildString {
+                            append("$name • $server")
+                            if (version.isNotBlank()) append(" • MC $version")
+                        })
                     }
-                    setNotificationState("1 bot ON", detail)
+                }
+
+                if (onlineBots.isNotEmpty()) {
+                    val visible = onlineBots.take(MAX_BOTS_IN_NOTIFICATION)
+                    val extra = onlineBots.size - visible.size
+                    val detail = visible.joinToString(" | ") + if (extra > 0) " | +$extra outro(s)" else ""
+                    setNotificationState(
+                        if (onlineBots.size == 1) "1 bot ON" else "${onlineBots.size} bots ON",
+                        detail
+                    )
                 } else {
-                    val detail = when (state) {
-                        "connecting" -> "Conectando $username..."
-                        "kicked" -> "$username foi expulso pelo servidor."
-                        "timeout" -> "Tempo limite ao conectar $username."
-                        "error" -> "Falha no bot $username."
-                        else -> "Nenhum bot conectado no momento."
-                    } + if (error.isNotBlank()) " $error" else ""
-                    setNotificationState("Bot OFF • monitoramento ativo", detail.take(MAX_NOTIFICATION_TEXT))
+                    val connected = info.optBoolean("connected", false)
+                    val state = info.optString("connectionState", if (connected) "connected" else "disconnected")
+                    val username = info.optString("username", "Bot").ifBlank { "Bot" }
+                    val host = info.optString("host", "").trim()
+                    val port = info.optInt("port", 25565)
+                    val version = info.optString("serverVersion", info.optString("version", "")).trim()
+                    val engine = info.optString("engine", "").trim()
+                    val error = info.optString("lastError", "").trim()
+
+                    if (connected) {
+                        val server = if (host.isNotBlank()) "$host:$port" else "servidor conectado"
+                        val detail = buildString {
+                            append("$username • $server")
+                            if (version.isNotBlank()) append(" • Minecraft $version")
+                            if (engine.isNotBlank()) append(" • $engine")
+                        }
+                        setNotificationState("1 bot ON", detail)
+                    } else {
+                        val detail = when (state) {
+                            "connecting" -> "Conectando $username..."
+                            "kicked" -> "$username foi expulso pelo servidor."
+                            "timeout" -> "Tempo limite ao conectar $username."
+                            "error" -> "Falha no bot $username."
+                            else -> "Nenhum bot conectado no momento."
+                        } + if (error.isNotBlank()) " $error" else ""
+                        setNotificationState("Bot OFF • monitoramento ativo", detail.take(MAX_NOTIFICATION_TEXT))
+                    }
                 }
             } catch (_: Exception) {
                 setNotificationState("Monitoramento ativo", "Sem resposta da API; nova tentativa automática.")
@@ -224,5 +255,6 @@ class BotMonitoringService : Service() {
         private const val REQUEST_STOP = 26033
         private const val POLL_INTERVAL_MS = 5000L
         private const val MAX_NOTIFICATION_TEXT = 240
+        private const val MAX_BOTS_IN_NOTIFICATION = 3
     }
 }
