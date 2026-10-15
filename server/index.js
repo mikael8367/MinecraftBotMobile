@@ -382,7 +382,23 @@ app.post('/api/connect', auth, (req, res) => {
       })
     })
 
-        activeBot.on('kicked', (reason) => {
+        // Renasce automaticamente após morrer, sem reconectar nem alterar o controle manual.
+    activeBot.on('death', () => {
+      if (bot !== activeBot || !botInfo.connected) return
+      console.log('[bot:death] Morte detectada; tentando renascer automaticamente.')
+      const respawnTimer = setTimeout(() => {
+        if (bot !== activeBot || !botInfo.connected) return
+        try {
+          activeBot.respawn()
+          console.log('[bot:respawn] Pedido de renascimento enviado.')
+        } catch (error) {
+          console.warn('[bot:respawn] Não foi possível renascer:', String(error && (error.message || error)).slice(0, 300))
+        }
+      }, 1000)
+      if (typeof respawnTimer.unref === 'function') respawnTimer.unref()
+    })
+
+    activeBot.on('kicked', (reason) => {
       if (bot !== activeBot) return
       clearConnectionTimer()
       const detail = reasonText(reason)
