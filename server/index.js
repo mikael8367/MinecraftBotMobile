@@ -1,5 +1,6 @@
 const express = require('express');
 const mineflayer = require('mineflayer');
+const mineflayerMikael = require('mineflayer-mikael');
 const { pathfinder, goals } = require('mineflayer-pathfinder');
 
 const app = express();
@@ -38,13 +39,17 @@ app.post('/api/connect', auth, (req, res) => {
   const port = Number(req.body.port || 25565);
   const username = String(req.body.username || 'MikaelBot').trim().slice(0, 16);
   const requestedVersion = String(req.body.version || 'auto');
+  const requestedEngine = String(req.body.engine || 'mikael').toLowerCase();
+  if (!['mikael', 'official'].includes(requestedEngine)) return res.status(400).json({ error: 'Motor inválido. Use mikael ou official.' });
+  if (requestedVersion === '26.3' && requestedEngine === 'official') return res.status(400).json({ error: 'O Mineflayer normal não declara suporte a 26.3. Selecione Mineflayer Mikael (experimental).' });
   if (!host || host.length > 253) return res.status(400).json({ error: 'Informe um endereço de servidor válido.' });
   if (!Number.isInteger(port) || port < 1 || port > 65535) return res.status(400).json({ error: 'Porta inválida.' });
   if (!username) return res.status(400).json({ error: 'Nome do bot inválido.' });
   if (bot) { try { bot.quit('Nova conexão solicitada'); } catch (_) {} bot = null; }
-  botInfo = { connected: false, username, host, port, version: requestedVersion, health: null, food: null, position: null, lastError: null };
+  botInfo = { connected: false, username, host, port, version: requestedVersion, engine: requestedEngine, health: null, food: null, position: null, lastError: null };
   try {
-    const activeBot = mineflayer.createBot({ host, port, username, version: requestedVersion === 'auto' ? false : requestedVersion, auth: 'offline', hideErrors: false });
+    const selectedMineflayer = requestedEngine === 'mikael' ? mineflayerMikael : mineflayer;
+    const activeBot = selectedMineflayer.createBot({ host, port, username, version: requestedVersion === 'auto' ? false : requestedVersion, auth: 'offline', hideErrors: false });
     bot = activeBot;
     activeBot.loadPlugin(pathfinder);
     activeBot.once('spawn', () => {
