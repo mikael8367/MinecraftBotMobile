@@ -8,13 +8,14 @@ test('normalizes accents and case without changing command meaning', () => {
   assert.equal(normalizeCommand('  AVANÇAR  '), 'avancar')
   assert.equal(parseCommand('avançar'), 'forward')
   assert.equal(parseCommand('vá para trás'), 'back')
-  assert.equal(parseCommand('ficar parado'), null)
-})
+  assert.equal(parseCommand('ficar parado'), 'stop')
+}) 
 
 test('recognizes all documented commands', () => {
   const examples = {
     'parar': 'stop',
     'FICA PARADO': 'stop',
+    'ficar parado': 'stop',
     'pule': 'jump',
     'ataque': 'attack',
     'andar para frente': 'forward',
