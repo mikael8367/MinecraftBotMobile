@@ -863,8 +863,9 @@ class MainActivity : Activity() {
             hint = "E-mail ou identificador da conta Microsoft"
             styleBotInput(this)
         }
-        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael","Mineflayer"))
-        configureVersionSpinner(mcVersion, "mikael", "26.3")
+        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        engine.setSelection(1)
+        configureVersionSpinner(mcVersion, "official", "auto")
         watchEngineSelection(engine, mcVersion)
 
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
@@ -875,7 +876,7 @@ class MainActivity : Activity() {
         form.addView(text("No modo Microsoft, o app mostra um código oficial de autorização. Não informe nem salve sua senha aqui.",11,muted,false))
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
-        form.addView(text("A seleção inicial é 26.3 + Mikael experimental. A lista vem do motor, mas o servidor real precisa ser testado.",11,muted,false))
+        form.addView(text("Padrão recomendado: Auto + Mineflayer oficial. Se não conectar, confira a versão real do servidor e a autenticação exigida.",11,muted,false))
         createStyledFormDialog("CRIAR NOVO BOT", form, "SALVAR BOT") { dialog ->
             val name = botName.text.toString().trim()
             val ip = serverIp.text.toString().trim()
