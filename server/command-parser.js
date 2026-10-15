@@ -16,7 +16,7 @@ function parseCommand (input) {
   // Avoid acting when a phrase explicitly negates the command.
   if (/\b(nao|nunca|jamais|evite|evitar)\b/.test(message)) return null
 
-  if (/\b(parar|pare|stop|fica parado)\b/.test(message)) return 'stop'
+  if (/\b(parar|pare|stop|fica(?:r)? parado)\b/.test(message)) return 'stop'
   if (/\b(pular|pule|jump)\b/.test(message)) return 'jump'
   if (/\b(atacar|ataque|bater)\b/.test(message)) return 'attack'
   if (/\b(frente|andar|avancar|andar para frente)\b/.test(message)) return 'forward'
