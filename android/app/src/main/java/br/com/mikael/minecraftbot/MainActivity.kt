@@ -644,7 +644,7 @@ class MainActivity : Activity() {
             else request("POST", "/api/action", JSONObject().put("action", "goto").put("x", x).put("y", y).put("z", z))
         }
         coordinateCard.addView(goto, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(6) })
-        controls.addView(text("O bot precisa estar conectado. Seguir jogador e navegar por coordenadas dependem do suporte do pathfinder nesta versão.", 10, muted, false).apply { setPadding(dp(2), dp(2), dp(2), dp(8) })
+        controls.addView(text("O bot precisa estar conectado. Seguir jogador e navegar por coordenadas dependem do suporte do pathfinder nesta versão.", 10, muted, false).apply { setPadding(dp(2), dp(2), dp(2), dp(8)) })
         controlScroll.addView(controls)
 
         fun selectTab(showControls: Boolean) {
