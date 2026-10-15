@@ -33,7 +33,7 @@ class MainActivity : Activity() {
     private var busy = false
     private var selectedTab = 0
     private lateinit var botListContainer: LinearLayout
-    private var availableVersions: List<String> = listOf("auto", "1.21.8", "1.20.1", "1.12.2", "1.8.9")
+    private var availableVersions: List<String> = listOf("auto", "26.3", "26.1", "1.21.11", "1.21.8", "1.20.1", "1.12.2", "1.8.9")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,8 +133,8 @@ class MainActivity : Activity() {
                         "old_alpha" -> alphas.add(id)
                     }
                 }
-                val all = mutableListOf("auto")
-                all.addAll(releases)
+                val all = mutableListOf("auto", "26.3")
+                all.addAll(releases.filter { it != "26.3" })
                 if (snapshots.isNotEmpty()) { all.add("── Snapshots ──"); all.addAll(snapshots) }
                 if (betas.isNotEmpty()) { all.add("── Betas antigas ──"); all.addAll(betas) }
                 if (alphas.isNotEmpty()) { all.add("── Alphas antigas ──"); all.addAll(alphas) }
@@ -144,7 +144,7 @@ class MainActivity : Activity() {
                 }
             } catch (_: Exception) {
                 runOnUiThread {
-                    val fallback = listOf("auto","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.2","1.21.1","1.21","1.20.6","1.20.4","1.20.1","1.19.4","1.18.2","1.16.5","1.12.2","1.8.9")
+                    val fallback = listOf("auto","26.3","26.1","1.21.11","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.2","1.21.1","1.21","1.20.6","1.20.4","1.20.1","1.19.4","1.18.2","1.16.5","1.12.2","1.8.9")
                     availableVersions = fallback
 
                 }
@@ -185,7 +185,7 @@ class MainActivity : Activity() {
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
                 appendLog("Bot selecionado: " + item.optString("name"))
-                request("POST","/api/connect",JSONObject().put("host",item.optString("host")).put("port",item.optInt("port",25565)).put("username",item.optString("name")).put("version",wanted))
+                request("POST","/api/connect",JSONObject().put("host",item.optString("host")).put("port",item.optInt("port",25565)).put("username",item.optString("name")).put("version",wanted).put("engine",item.optString("engine","mikael")))
             }
             actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
             val delete = Button(this).apply { text="EXCLUIR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(65,43,43),9) }
@@ -208,10 +208,15 @@ class MainActivity : Activity() {
         val mcVersion = Spinner(this)
         val versions = (listOf(item.optString("version","auto")) + availableVersions).distinct()
         mcVersion.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,versions)
+        val engine = Spinner(this)
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer normal"))
+        engine.setSelection(if (item.optString("engine","mikael") == "official") 1 else 0)
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
+        form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
+        form.addView(text("Mineflayer Mikael é experimental; suporte real depende de testes com o servidor.",11,muted,false))
         val dialog = AlertDialog.Builder(this).setTitle("Configurações do bot").setView(form)
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
         dialog.setOnShowListener {
@@ -220,13 +225,14 @@ class MainActivity : Activity() {
                 val ip = serverIp.text.toString().trim()
                 val p = serverPort.text.toString().toIntOrNull()
                 val v = mcVersion.selectedItem?.toString() ?: "auto"
+                val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
                 if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
                     Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val items = savedBots()
                 if (index !in 0 until items.length()) return@setOnClickListener
-                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v))
+                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId))
                 saveBots(items)
                 Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
@@ -242,10 +248,14 @@ class MainActivity : Activity() {
         val serverPort = EditText(this).apply { hint="Porta (ex.: 25565)"; setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_NUMBER }
         val mcVersion = Spinner(this)
         mcVersion.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,availableVersions)
+        val engine = Spinner(this)
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer normal"))
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
         form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
         form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
+        form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
+        form.addView(text("Mineflayer Mikael é experimental; versões não testadas podem falhar.",11,muted,false))
         val dialog = AlertDialog.Builder(this).setTitle("Criar bot").setView(form)
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR BOT",null).create()
         dialog.setOnShowListener {
@@ -254,12 +264,13 @@ class MainActivity : Activity() {
                 val ip = serverIp.text.toString().trim()
                 val p = serverPort.text.toString().toIntOrNull()
                 val v = mcVersion.selectedItem?.toString() ?: "auto"
+                val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
                 if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535 || v.startsWith("──")) {
                     Toast.makeText(this,"Preencha nome, IP e uma porta válida.",Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val items = savedBots()
-                items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v))
+                items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId))
                 saveBots(items)
                 Toast.makeText(this,"Bot salvo!",Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
