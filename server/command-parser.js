@@ -10,20 +10,31 @@ function normalizeCommand (input) {
 }
 
 function parseCommand (input) {
-  const message = normalizeCommand(input)
+  let message = normalizeCommand(input)
+  if (!message) return null
+  message = message.replace(/[.!?,;]+$/g, '').trim()
+  message = message.replace(/^(?:bot|mikaelbot)[\s,:-]+/i, '').trim()
   if (!message) return null
 
-  // Avoid acting when a phrase explicitly negates the command.
+  // Never move/attack on a phrase that explicitly negates an action.
   if (/\b(nao|nunca|jamais|evite|evitar)\b/.test(message)) return null
 
-  if (/\b(parar|pare|stop|fica(?:r)? parado)\b/.test(message)) return 'stop'
-  if (/\b(pular|pule|jump)\b/.test(message)) return 'jump'
-  if (/\b(atacar|ataque|bater)\b/.test(message)) return 'attack'
-  if (/\b(frente|andar|avancar|andar para frente)\b/.test(message)) return 'forward'
-  if (/\b(voltar|tras)\b/.test(message)) return 'back'
-  if (/\b(esquerda)\b/.test(message)) return 'left'
-  if (/\b(direita)\b/.test(message)) return 'right'
-  if (/\b(correr|sprint)\b/.test(message)) return 'sprint'
+  // Match complete commands or known command phrases; keyword mentions in
+  // unrelated sentences (e.g. "o jogador está na minha frente") are not orders.
+  const rules = [
+    [/^(?:parar|pare|stop|fica(?:r)? parado|fique parado|para de andar)(?: agora)?$/, 'stop'],
+    [/^(?:pular|pule|pula|jump)(?: agora)?$/, 'jump'],
+    [/^(?:atacar|ataque|bater)(?: agora| nele| no jogador)?$/, 'attack'],
+    [/^(?:frente|andar|ande|avancar|avanca|andar para frente|ande para frente|va para frente|vai para frente|siga em frente|segue em frente)$/, 'forward'],
+    [/^(?:voltar|volte|tras|va para tras|vai para tras|ande para tras|andar para tras|recue)$/, 'back'],
+    [/^(?:esquerda|va para esquerda|vai para esquerda|ande para esquerda|vire a esquerda|vira a esquerda)$/, 'left'],
+    [/^(?:direita|va para direita|vai para direita|ande para direita|vire a direita|vira a direita)$/, 'right'],
+    [/^(?:correr|corra|sprint)$/, 'sprint']
+  ]
+
+  for (const [pattern, action] of rules) {
+    if (pattern.test(message)) return action
+  }
   return null
 }
 
