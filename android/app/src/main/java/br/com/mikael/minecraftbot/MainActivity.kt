@@ -493,7 +493,7 @@ class MainActivity : Activity() {
                         startStatusPolling()
                     }
                     if (path == "/api/disconnect" && code in 200..299) stopStatusPolling()
-                    if (quiet && connectionState in setOf("disconnected", "kicked", "timeout", "error")) {
+                    if (quiet && state.has("connectionState") && connectionState in setOf("disconnected", "kicked", "timeout", "error")) {
                         stopStatusPolling()
                     }
                 }
