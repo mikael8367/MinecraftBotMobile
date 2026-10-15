@@ -3,6 +3,8 @@ package br.com.mikael.minecraftbot
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -473,7 +475,14 @@ class MainActivity : Activity() {
                     if (!quiet) appendLog("HTTP $code $path\n$response")
                     if (serverError.isNotBlank() && (!quiet || serverError != lastPolledError)) appendLog("ERRO: $serverError")
                     if (quiet && (connectionState != lastPolledState || serverError != lastPolledError)) {
-                        appendLog("Estado do bot: $connectionState" + if (serverError.isNotBlank()) " — $serverError" else "")
+                        val serverVersion = state.optString("serverVersion", "")
+                        val engineId = state.optString("engine", "")
+                        val pathfindingAvailable = state.optBoolean("pathfindingAvailable", false)
+                        appendLog("Estado do bot: $connectionState" +
+                            (if (serverVersion.isNotBlank()) " • Minecraft $serverVersion" else "") +
+                            (if (engineId.isNotBlank()) " • Motor $engineId" else "") +
+                            (if (connectionState == "connected") " • Seguir: " + if (pathfindingAvailable) "disponível" else "desativado" else "") +
+                            (if (serverError.isNotBlank()) " — $serverError" else ""))
                     }
                     if (quiet) {
                         lastPolledState = connectionState
