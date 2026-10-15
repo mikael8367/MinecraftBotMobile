@@ -322,7 +322,7 @@ class MainActivity : Activity() {
                 setOnClickListener { showBotSettingsDialog(i, item) }
             }
             card.addView(botTitle)
-            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer oficial" else "Mikael experimental") + "\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
+            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer oficial" else "Mikael experimental") + " • " + (if (item.optString("auth","offline") == "microsoft") "Microsoft" else "Offline") + "\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
             card.setOnClickListener { showBotSettingsDialog(i, item) }
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
             val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
@@ -367,6 +367,7 @@ class MainActivity : Activity() {
             hint = "E-mail ou identificador da conta Microsoft"
             setText(item.optString("accountId",""))
         }
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
         val selectedEngine = item.optString("engine","mikael")
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
         configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
@@ -515,6 +516,31 @@ class MainActivity : Activity() {
     private fun outline(color:Int,radius:Int)=GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius=dp(radius).toFloat(); setStroke(dp(1),color) }
     private fun dp(n:Int)= (n*resources.displayMetrics.density).toInt()
 
+    private fun showMicrosoftLoginDialog(verificationUri: String, code: String) {
+        val candidate = android.net.Uri.parse(verificationUri)
+        val host = candidate.host?.lowercase().orEmpty()
+        val allowedHost = host == "microsoft.com" || host.endsWith(".microsoft.com") ||
+            host == "microsoftonline.com" || host.endsWith(".microsoftonline.com")
+        val safeUri = if (candidate.scheme == "https" && allowedHost) {
+            candidate.toString()
+        } else {
+            "https://microsoft.com/devicelogin"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Autorizar conta Microsoft")
+            .setMessage("Para servidores que exigem uma conta Java válida, abra a página oficial e digite este código:\n\n$code\n\nA senha não é solicitada pelo MinecraftBotMobile. Após autorizar, volte ao app e aguarde a conexão.")
+            .setPositiveButton("Abrir Microsoft") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(safeUri)))
+                } catch (error: Exception) {
+                    Toast.makeText(this, "Não foi possível abrir o navegador: ${error.message ?: "erro"}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Fechar", null)
+            .show()
+    }
+
     private fun appendLog(message:String) {
         if (!::logs.isInitialized) return
         val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
@@ -591,10 +617,20 @@ class MainActivity : Activity() {
                     val connected = state.optBoolean("connected", parsed.optBoolean("connected", false))
                     val serverError = parsed.optString("error").ifBlank { state.optString("lastError", "") }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
+                    val authState = state.optJSONObject("authCode")
+                    val deviceCode = authState?.optString("userCode", "").orEmpty()
+                    val verificationUri = authState?.optString("verificationUri", "https://microsoft.com/devicelogin").orEmpty()
+
+                    if (deviceCode.isNotBlank() && deviceCode != lastShownAuthCode) {
+                        lastShownAuthCode = deviceCode
+                        appendLog("AUTENTICAÇÃO MICROSOFT: abra $verificationUri e informe o código $deviceCode")
+                        showMicrosoftLoginDialog(verificationUri, deviceCode)
+                    }
 
                     status.text = when {
                         code !in 200..299 -> "● API com erro (HTTP $code)"
                         (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao mundo"
+                        (path == "/api/status" || path == "/api/connect") && deviceCode.isNotBlank() -> "● AUTENTICAÇÃO MICROSOFT — código $deviceCode"
                         (path == "/api/status" || path == "/api/connect") && serverError.isNotBlank() -> "● BOT OFF — $serverError"
                         path == "/api/status" || path == "/api/connect" -> "● BOT — $connectionState"
                         else -> "● Resposta recebida"
