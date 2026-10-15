@@ -25,10 +25,6 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(155, 176, 162)
     private lateinit var root: LinearLayout
     private lateinit var pages: FrameLayout
-    private lateinit var host: EditText
-    private lateinit var port: EditText
-    private lateinit var username: EditText
-    private lateinit var version: Spinner
     private lateinit var target: EditText
     private lateinit var command: EditText
     private lateinit var status: TextView
@@ -65,6 +61,8 @@ class MainActivity : Activity() {
         val statusCard = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(15,12,15,12) }
         statusCard.addView(text("STATUS DO BOT",10,muted,true))
         status = text("●  Desconectado",15,white,true); statusCard.addView(status)
+        logs = text("Aguardando tentativa de conexão...",11,white,false).apply { setTextIsSelectable(true); setPadding(dp(8),dp(8),dp(8),dp(8)) }
+        statusCard.addView(logs)
         root.addView(statusCard, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
 
         val botHome = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(dp(14),dp(14),dp(14),dp(14)) }
@@ -81,7 +79,7 @@ class MainActivity : Activity() {
         refreshBotList()
 
         val tabs = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; background=rounded(panel,14); setPadding(4,4,4,4) }
-        val names = listOf("🤖  Bots","✣  Controle","✦  IA")
+        val names = listOf("🤖  Meus Bots","✣  Controle","✦  IA")
         tabButtons = names.mapIndexed { i, name ->
             val t = text(name,12,muted,true).apply { gravity=Gravity.CENTER; setPadding(3,13,3,13); background=rounded(if(i==0) green else panel,11); setOnClickListener { showTab(i) } }
             tabs.addView(t,LinearLayout.LayoutParams(0,-2,1f)); t
@@ -89,7 +87,7 @@ class MainActivity : Activity() {
         root.addView(tabs,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
         pages = FrameLayout(this)
         root.addView(pages,LinearLayout.LayoutParams(-1,0,1f))
-        buildConnectPage(); buildControlPage(); buildAiPage()
+        buildBotsInfoPage(); buildControlPage(); buildAiPage()
         showTab(0)
         loadMinecraftVersions()
     }
@@ -100,26 +98,10 @@ class MainActivity : Activity() {
         box.addView(text(title,18,white,true)); box.addView(text(subtitle,12,muted,false).apply { setPadding(0,4,0,12) })
         pageViews.add(box); return box
     }
-    private fun buildConnectPage() {
-        val p=page("Conexão do servidor","Backend configurado automaticamente. Informe os dados do servidor Java.")
-        host=field(p,"IP ou domínio do servidor","play.exemplo.com")
-        port=field(p,"Porta","25565")
-        username=field(p,"Nome do bot","MikaelBot")
-        p.addView(text("VERSÃO DO MINECRAFT",10,muted,true).apply { setPadding(0,10,0,4) })
-        version=Spinner(this)
-        version.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item, mutableListOf("auto","Carregando versões..."))
-        p.addView(version)
-        button(p,"▶ LIGAR BOT",true) {
-            appendLog("Solicitando conexão com ${host.text.toString().trim()}:${port.text.toString().trim()}...")
-            request("POST","/api/connect",JSONObject().put("host",host.text.toString().trim()).put("port",port.text.toString().toIntOrNull()?:25565).put("username",username.text.toString().trim()).put("version",version.selectedItem.toString()))
-        }
-        button(p,"⟳ VERIFICAR SE ESTÁ ON",false) { request("GET","/api/status",JSONObject()) }
-        p.addView(text("LOGS DE CONEXÃO",11,muted,true).apply { setPadding(0,16,0,6) })
-        logs=text("Aguardando tentativa de conexão...",12,white,false).apply {
-            setTextIsSelectable(true); setPadding(dp(10),dp(10),dp(10),dp(10)); background=rounded(Color.rgb(9,18,13),10)
-        }
-        p.addView(logs,LinearLayout.LayoutParams(-1,dp(145)))
-        button(p,"COPIAR LOG",false) {
+    private fun buildBotsInfoPage() {
+        val p=page("Seus bots salvos","Crie e gerencie bots na seção MEUS BOTS acima. Os bots criados aparecem logo abaixo do título.")
+        p.addView(text("Toque em ABRIR / LIGAR no bot desejado para iniciar a conexão. Não é necessário cadastrar o mesmo bot novamente aqui.",13,white,false))
+        button(p,"COPIAR LOG DE CONEXÃO",false) {
             val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("MinecraftBotMobile log",logs.text.toString()))
             Toast.makeText(this,"Log copiado",Toast.LENGTH_SHORT).show()
@@ -158,23 +140,13 @@ class MainActivity : Activity() {
                 if (alphas.isNotEmpty()) { all.add("── Alphas antigas ──"); all.addAll(alphas) }
                 runOnUiThread {
                     availableVersions = all.filter { !it.startsWith("──") }
-                    version.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, all)
-                    val saved = getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("mc_version", "auto") ?: "auto"
-                    val position = all.indexOf(saved)
-                    if (position >= 0) version.setSelection(position)
-                    version.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                        override fun onNothingSelected(parent: AdapterView<*>?) {}
-                        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                            val selected = all[position]
-                            if (!selected.startsWith("──")) getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putString("mc_version", selected).apply()
-                        }
-                    }
+
                 }
             } catch (_: Exception) {
                 runOnUiThread {
                     val fallback = listOf("auto","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.2","1.21.1","1.21","1.20.6","1.20.4","1.20.1","1.19.4","1.18.2","1.16.5","1.12.2","1.8.9")
                     availableVersions = fallback
-                    version.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, fallback)
+
                 }
             }
         }
@@ -206,11 +178,7 @@ class MainActivity : Activity() {
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
             val use = Button(this).apply { text="ABRIR / LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
             use.setOnClickListener {
-                host.setText(item.optString("host")); port.setText(item.optString("port","25565")); username.setText(item.optString("name"))
                 val wanted = item.optString("version","auto")
-                val idx = (0 until version.adapter.count).firstOrNull { version.adapter.getItem(it).toString() == wanted }
-                if (idx != null) version.setSelection(idx)
-                showTab(0)
                 appendLog("Bot selecionado: " + item.optString("name"))
                 request("POST","/api/connect",JSONObject().put("host",item.optString("host")).put("port",item.optInt("port",25565)).put("username",item.optString("name")).put("version",wanted))
             }
