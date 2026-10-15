@@ -6,6 +6,7 @@
 // Minecraft's protocol from scratch.
 const fork = require('mineflayer-mikael')
 const versionInfo = require('mineflayer-mikael/lib/version')
+const { installMikaelCompatibility } = require('./mikael-compat')
 
 const testedVersions = Object.freeze([...(versionInfo.testedVersions || [])])
 
@@ -19,12 +20,18 @@ function createBot (options = {}) {
   }
 
   // Keep the fork's parser and protocol stack; normalize diagnostics for this app.
-  return fork.createBot({
+  const bot = fork.createBot({
     ...options,
     version: requested === 'auto' ? false : requested,
     hideErrors: false,
     logErrors: false
   })
+
+  // Current @wp2508/mineflayer release contains legacy action IDs and flat entity
+  // movement readers that do not match 26.3's wire shapes. Apply narrow runtime
+  // shims only when 26.3/protocol 777 is selected or negotiated.
+  installMikaelCompatibility(bot, requested)
+  return bot
 }
 
 module.exports = {
