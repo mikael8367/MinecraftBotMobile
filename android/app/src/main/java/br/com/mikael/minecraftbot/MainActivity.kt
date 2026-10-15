@@ -340,6 +340,14 @@ class MainActivity : Activity() {
                     .put("engine",item.optString("engine","mikael")))
             }
             actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
+            val check = Button(this).apply { text="VERIFICAR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(43,61,49),9) }
+            check.setOnClickListener {
+                appendLog("Verificando servidor: " + item.optString("host") + ":" + item.optInt("port",25565))
+                request("POST", "/api/server-check", JSONObject()
+                    .put("host", item.optString("host"))
+                    .put("port", item.optInt("port",25565)))
+            }
+            actions.addView(check,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
             val delete = Button(this).apply { text="EXCLUIR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(65,43,43),9) }
             delete.setOnClickListener {
                 val next = org.json.JSONArray()
