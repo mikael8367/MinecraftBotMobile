@@ -14,6 +14,13 @@ No Android 13 ou mais recente, autorize notificações para ver o estado. Se o s
 2. Abra a execução do workflow **Build Android APK** acionada pelo push mais recente.
 3. Baixe o artefato `MinecraftBotMobile-debug-apk`.
 
+## Autenticação do bot
+
+- **Offline**: use quando o servidor estiver configurado para aceitar jogadores sem autenticação oficial.
+- **Microsoft**: use em servidores que exigem conta Java válida. O app apresenta o link e o código oficial de dispositivo para autorizar no navegador; o MinecraftBotMobile não pede nem armazena a senha da conta. O identificador da conta funciona como chave do cache de autenticação.
+
+O login Microsoft não contorna lista de permissões, banimentos ou regras do servidor. A conta precisa ter acesso legítimo ao servidor.
+
 ## Backend
 O backend deve ser executado com Node.js 22 ou superior, com a pasta de trabalho `server`. Configure `API_TOKEN` como segredo nas Environment Variables do Render e use HTTPS no app.
 
@@ -27,7 +34,7 @@ npm install
 npm test
 ```
 
-O workflow **Backend regression tests** executa esses testes automaticamente quando os arquivos do backend mudam. O workflow Android compila o APK, mas uma compilação bem-sucedida não comprova que uma conexão real do Minecraft funcione.
+O workflow **Backend regression tests** executa esses testes automaticamente quando os arquivos do backend mudam. O workflow Android compila o APK, mas uma compilação bem-sucedida não comprova que uma conexão real do Minecraft funcione. O script `server/smoke/live-connect-smoke.js` testa a API contra um servidor 26.3 real: ele espera o spawn, confirma coordenadas, manda o bot andar e valida a desconexão. Para executá-lo, o servidor Paper 26.3 deve estar acessível em `127.0.0.1:25565` e o backend em `127.0.0.1:10000`, com `API_TOKEN` igual nos dois ambientes. Esse teste exige servidor real; não faz parte de `npm test`.
 
 ## Motores
 - **Mineflayer oficial**: pacote upstream PrismarineJS.
