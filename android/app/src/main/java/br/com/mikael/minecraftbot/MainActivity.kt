@@ -572,54 +572,79 @@ class MainActivity : Activity() {
 
         val controlScroll = ScrollView(this).apply { isFillViewport = true }
         val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(8)) }
-        controls.addView(text("MOVIMENTO", 10, green, true).apply { setPadding(0, dp(4), 0, dp(6)) })
+        fun controlSection(title: String, subtitle: String? = null): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(Color.rgb(13, 27, 18), 14)
+                setPadding(dp(11), dp(10), dp(11), dp(11))
+            }
+            card.addView(text(title, 11, green, true).apply { setPadding(0, 0, 0, dp(4)) })
+            if (subtitle != null) card.addView(text(subtitle, 10, muted, false).apply { setPadding(0, 0, 0, dp(7)) })
+            controls.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+            return card
+        }
+        val movementCard = controlSection("MOVIMENTO", "Toque para executar uma ação")
         val grid = GridLayout(this).apply { columnCount = 3 }
-        controls.addView(grid)
+        movementCard.addView(grid)
         fun controlButton(labelText: String, action: String) {
-            val b = Button(this).apply { text = labelText; isAllCaps = false; textSize = 11f; setTextColor(white); background = rounded(Color.rgb(34, 57, 41), 11) }
+            val b = Button(this).apply {
+                text = labelText; isAllCaps = false; textSize = 11f
+                setTextColor(white); background = rounded(Color.rgb(34, 57, 41), 11)
+                minHeight = dp(48); minimumHeight = dp(48)
+                setPadding(dp(2), dp(4), dp(2), dp(4))
+            }
             b.setOnClickListener { request("POST", "/api/action", JSONObject().put("action", action)) }
-            grid.addView(b, GridLayout.LayoutParams().apply { width = 0; height = dp(52); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) })
+            grid.addView(b, GridLayout.LayoutParams().apply {
+                width = 0; height = dp(52)
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            })
         }
         controlButton("↑ Frente", "forward"); controlButton("↓ Trás", "back"); controlButton("→ Direita", "right")
         controlButton("← Esquerda", "left"); controlButton("⤒ Pular", "jump"); controlButton("■ Parar", "stop")
         controlButton("⚡ Correr", "sprint"); controlButton("⌁ Agachar", "sneak"); controlButton("⚔ Atacar", "attack")
-        controls.addView(text("MENSAGEM NO CHAT", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
-        val chatField = EditText(this).apply { hint = "Mensagem para enviar no servidor"; setSingleLine(true); styleBotInput(this) }
-        controls.addView(chatField, LinearLayout.LayoutParams(-1, dp(48)))
+
+        val chatCard = controlSection("MENSAGEM NO CHAT", "Enviar uma mensagem no servidor")
+        val chatField = EditText(this).apply { hint = "Digite sua mensagem"; setSingleLine(true); styleBotInput(this) }
+        chatCard.addView(chatField, LinearLayout.LayoutParams(-1, dp(46)))
         val sendChat = Button(this).apply { text = "ENVIAR MENSAGEM"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
         sendChat.setOnClickListener {
             val message = chatField.text.toString().trim()
             if (message.isBlank()) chatField.error = "Digite uma mensagem"
             else request("POST", "/api/chat/send", JSONObject().put("message", message))
         }
-        controls.addView(sendChat, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
-        controls.addView(text("SEGUIR JOGADOR", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
-        val followField = EditText(this).apply { hint = "Nome exato do jogador"; setSingleLine(true); styleBotInput(this) }
-        controls.addView(followField, LinearLayout.LayoutParams(-1, dp(48)))
-        val follow = Button(this).apply { text = "SEGUIR JOGADOR"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
+        chatCard.addView(sendChat, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(6) })
+
+        val followCard = controlSection("SEGUIR JOGADOR", "Informe o nome exato de quem o bot deve seguir")
+        val followField = EditText(this).apply { hint = "Nome do jogador"; setSingleLine(true); styleBotInput(this) }
+        followCard.addView(followField, LinearLayout.LayoutParams(-1, dp(46)))
+        val follow = Button(this).apply { text = "COMEÇAR A SEGUIR"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
         follow.setOnClickListener {
             val name = followField.text.toString().trim()
             if (name.isBlank()) followField.error = "Digite o nome do jogador"
             else request("POST", "/api/action", JSONObject().put("action", "follow").put("target", name))
         }
-        controls.addView(follow, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
-        controls.addView(text("IR PARA COORDENADAS", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
+        followCard.addView(follow, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(6) })
+
+        val coordinateCard = controlSection("IR PARA COORDENADAS", "Digite as posições X, Y e Z do mundo")
         val coords = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val coordX = EditText(this).apply { hint = "X"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
         val coordY = EditText(this).apply { hint = "Y"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
         val coordZ = EditText(this).apply { hint = "Z"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
-        coords.addView(coordX, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
-        coords.addView(coordY, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
-        coords.addView(coordZ, LinearLayout.LayoutParams(0, dp(48), 1f))
-        controls.addView(coords)
+        coords.addView(coordX, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(5) })
+        coords.addView(coordY, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(5) })
+        coords.addView(coordZ, LinearLayout.LayoutParams(0, dp(46), 1f))
+        coordinateCard.addView(coords)
         val goto = Button(this).apply { text = "IR ATÉ X / Y / Z"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
         goto.setOnClickListener {
-            val x = coordX.text.toString().toDoubleOrNull(); val y = coordY.text.toString().toDoubleOrNull(); val z = coordZ.text.toString().toDoubleOrNull()
+            val x = coordX.text.toString().toDoubleOrNull()
+            val y = coordY.text.toString().toDoubleOrNull()
+            val z = coordZ.text.toString().toDoubleOrNull()
             if (x == null || y == null || z == null) Toast.makeText(this, "Informe X, Y e Z válidos.", Toast.LENGTH_LONG).show()
             else request("POST", "/api/action", JSONObject().put("action", "goto").put("x", x).put("y", y).put("z", z))
         }
-        controls.addView(goto, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
-        controls.addView(text("Seguir e ir a coordenadas dependem do pathfinder e da versão do servidor. O bot precisa estar conectado.", 11, muted, false).apply { setPadding(0, dp(8), 0, 0) })
+        coordinateCard.addView(goto, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(6) })
+        controls.addView(text("O bot precisa estar conectado. Seguir jogador e navegar por coordenadas dependem do suporte do pathfinder nesta versão.", 10, muted, false).apply { setPadding(dp(2), dp(2), dp(2), dp(8) })
         controlScroll.addView(controls)
 
         fun selectTab(showControls: Boolean) {
