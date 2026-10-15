@@ -2,7 +2,11 @@ package br.com.mikael.minecraftbot
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.Manifest
+import android.content.Intent
 import android.os.Bundle
+import android.os.Build
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.graphics.Color
@@ -35,6 +39,8 @@ class MainActivity : Activity() {
     private var busy = false
     private var selectedTab = 0
     private lateinit var botListContainer: LinearLayout
+    private lateinit var monitoringSwitch: Switch
+    private var pendingMonitoringPermission = false
 
     // Fallback metadata from the exact Mineflayer package testedVersions lists.
     // On startup these are refreshed from /api/capabilities, so UI and backend agree.
@@ -97,6 +103,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pendingMonitoringPermission = false
         stopStatusPolling()
         super.onDestroy()
     }
@@ -129,6 +136,26 @@ class MainActivity : Activity() {
         status = text("●  Desconectado",15,white,true); statusCard.addView(status)
         logs = text("Aguardando tentativa de conexão...",11,white,false).apply { setTextIsSelectable(true); setPadding(dp(8),dp(8),dp(8),dp(8)) }
         statusCard.addView(logs)
+
+        val monitoringRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(10), dp(2), dp(2))
+        }
+        val monitoringLabels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        monitoringLabels.addView(text("Monitoramento em primeiro plano", 13, white, true))
+        monitoringLabels.addView(text("Notificação persistente com o bot ON/OFF, mesmo ao fechar a tela.", 10, muted, false).apply {
+            setPadding(0, dp(3), dp(8), 0)
+        })
+        monitoringRow.addView(monitoringLabels, LinearLayout.LayoutParams(0, -2, 1f))
+        monitoringSwitch = Switch(this).apply {
+            contentDescription = "Ativar monitoramento em primeiro plano"
+            isChecked = getSharedPreferences(BotMonitoringService.PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(BotMonitoringService.KEY_MONITORING, false)
+        }
+        monitoringRow.addView(monitoringSwitch)
+        monitoringSwitch.setOnCheckedChangeListener { _, enabled -> setForegroundMonitoring(enabled) }
+        statusCard.addView(monitoringRow)
         root.addView(statusCard, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
 
         val botHome = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(dp(14),dp(14),dp(14),dp(14)) }
@@ -156,6 +183,63 @@ class MainActivity : Activity() {
         buildBotsInfoPage(); buildControlPage(); buildAiPage()
         showTab(0)
         loadEngineCapabilities()
+        if (monitoringSwitch.isChecked) setForegroundMonitoring(true)
+    }
+
+    private fun setForegroundMonitoring(enabled: Boolean) {
+        val prefs = getSharedPreferences(BotMonitoringService.PREFS_NAME, MODE_PRIVATE)
+        if (enabled && Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            pendingMonitoringPermission = true
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_MONITOR_NOTIFICATION_PERMISSION)
+            return
+        }
+
+        prefs.edit().putBoolean(BotMonitoringService.KEY_MONITORING, enabled).apply()
+        val serviceIntent = Intent(this, BotMonitoringService::class.java)
+        if (enabled) {
+            serviceIntent.action = BotMonitoringService.ACTION_START
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+                else startService(serviceIntent)
+                appendLog("Monitoramento em primeiro plano ativado. A notificação acompanha o estado retornado pelo backend.")
+            } catch (error: Exception) {
+                prefs.edit().putBoolean(BotMonitoringService.KEY_MONITORING, false).apply()
+                monitoringSwitch.setOnCheckedChangeListener(null)
+                monitoringSwitch.isChecked = false
+                monitoringSwitch.setOnCheckedChangeListener { _, checked -> setForegroundMonitoring(checked) }
+                Toast.makeText(this, "Não foi possível iniciar o monitoramento: ${'$'}{error.message ?: "erro desconhecido"}", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            stopService(serviceIntent)
+            appendLog("Monitoramento em primeiro plano desativado.")
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_MONITOR_NOTIFICATION_PERMISSION) return
+        val wasGranted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        pendingMonitoringPermission = false
+        if (wasGranted) {
+            setForegroundMonitoring(true)
+        } else {
+            getSharedPreferences(BotMonitoringService.PREFS_NAME, MODE_PRIVATE)
+                .edit().putBoolean(BotMonitoringService.KEY_MONITORING, false).apply()
+            monitoringSwitch.setOnCheckedChangeListener(null)
+            monitoringSwitch.isChecked = false
+            monitoringSwitch.setOnCheckedChangeListener { _, checked -> setForegroundMonitoring(checked) }
+            Toast.makeText(this, "Permita notificações para usar o monitoramento em primeiro plano.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::monitoringSwitch.isInitialized) {
+            val enabled = getSharedPreferences(BotMonitoringService.PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(BotMonitoringService.KEY_MONITORING, false)
+            if (monitoringSwitch.isChecked != enabled) monitoringSwitch.isChecked = enabled
+        }
     }
 
     private val pageViews = mutableListOf<View>()
