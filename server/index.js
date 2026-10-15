@@ -343,9 +343,14 @@ app.post('/api/connect', auth, (req, res) => {
 
     activeBot.on('error', (error) => {
       if (bot !== activeBot) return
+      // A socket error can arrive after kicked/end/timeout. Preserve the first
+      // terminal state instead of making the UI report a different failure.
+      if (['kicked', 'timeout', 'disconnected'].includes(botInfo.connectionState)) return
+
       const message = String(error && (error.message || error) || 'Erro desconhecido').slice(0, 500)
       updateBotInfo({
         connectionState: botInfo.connected ? 'connected' : 'error',
+        authCode: botInfo.connected ? botInfo.authCode : null,
         lastError: message
       })
       console.error('[bot:error]', JSON.stringify({
