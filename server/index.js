@@ -25,6 +25,9 @@ const MICROSOFT_CONNECT_TIMEOUT_MS = Number.isFinite(rawMicrosoftConnectTimeout)
   : 600000
 let bot = null
 let connectionTimer = null
+let reconnectTimer = null
+let autoReconnectEnabled = false
+let lastConnectionPayload = null
 const controlTimers = new Map()
 
 let botInfo = {
@@ -43,6 +46,7 @@ let botInfo = {
   food: null,
   position: null,
   lastError: null,
+  autoReconnect: false,
   updatedAt: new Date().toISOString()
 }
 
@@ -98,6 +102,32 @@ function microsoftCodeInfo (data) {
 function clearConnectionTimer () {
   if (connectionTimer) clearTimeout(connectionTimer)
   connectionTimer = null
+}
+
+function clearReconnectTimer () {
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = null
+}
+
+function scheduleReconnect (reason) {
+  if (!autoReconnectEnabled || !lastConnectionPayload || reconnectTimer) return
+  console.log('[bot:reconnect] Tentando reconectar em 5 segundos. Motivo:', reason || 'conexão encerrada')
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null
+    if (!autoReconnectEnabled || !lastConnectionPayload || botInfo.connectionState === 'kicked') return
+    try {
+      const response = await fetch('http://127.0.0.1:' + PORT + '/api/connect', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + API_TOKEN },
+        body: JSON.stringify(lastConnectionPayload)
+      })
+      if (!response.ok) console.warn('[bot:reconnect] A API recusou a tentativa (HTTP ' + response.status + ').')
+    } catch (error) {
+      console.warn('[bot:reconnect] Falha ao iniciar tentativa:', String(error && (error.message || error)).slice(0, 250))
+      scheduleReconnect('falha ao iniciar tentativa')
+    }
+  }, 5000)
+  if (typeof reconnectTimer.unref === 'function') reconnectTimer.unref()
 }
 
 function clearControlTimers () {
@@ -293,7 +323,17 @@ app.post('/api/server-check', auth, async (req, res) => {
 })
 
 
+app.get('/api/settings/auto-reconnect', auth, (_req, res) => res.json({ ok: true, autoReconnect: autoReconnectEnabled }))
+
+app.post('/api/settings/auto-reconnect', auth, (req, res) => {
+  autoReconnectEnabled = Boolean(req.body && req.body.enabled)
+  updateBotInfo({ autoReconnect: autoReconnectEnabled })
+  if (!autoReconnectEnabled) clearReconnectTimer()
+  return res.json({ ok: true, autoReconnect: autoReconnectEnabled })
+})
+
 app.post('/api/connect', auth, (req, res) => {
+  clearReconnectTimer()
   let options
   try {
     options = validateConnectionPayload(req.body, engines)
@@ -303,6 +343,7 @@ app.post('/api/connect', auth, (req, res) => {
   }
 
   disconnectCurrentBot('Substituído por uma nova conexão')
+  lastConnectionPayload = JSON.parse(JSON.stringify(req.body))
   const engine = engines[options.engine]
   updateBotInfo({
     connected: false,
@@ -455,6 +496,7 @@ app.post('/api/connect', auth, (req, res) => {
         pathfindingAvailable: false,
         lastError: botInfo.lastError || (detail && detail !== 'socketClosed' ? 'Conexão encerrada: ' + detail : null)
       })
+      if (nextState !== 'kicked' && nextState !== 'disconnected') scheduleReconnect(detail || nextState)
     })
 
     connectionTimer = setTimeout(() => {
@@ -526,6 +568,9 @@ app.post('/api/chat', auth, (req, res) => {
 })
 
 app.post('/api/disconnect', auth, (_req, res) => {
+  autoReconnectEnabled = false
+  updateBotInfo({ autoReconnect: false })
+  clearReconnectTimer()
   disconnectCurrentBot('Desconectado pelo aplicativo')
   return res.json({ ok: true, message: 'Bot desconectado.', status: getStatus() })
 })
