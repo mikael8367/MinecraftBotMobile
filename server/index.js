@@ -5,6 +5,7 @@ const crypto = require('node:crypto')
 const { pathfinder, goals } = require('mineflayer-pathfinder')
 const { engines, capabilities } = require('./engine-registry')
 const { ValidationError, validateConnectionPayload } = require('./connection-validation')
+const { parseCommand } = require('./command-parser')
 
 const app = express()
 app.use(express.json({ limit: '32kb' }))
@@ -366,20 +367,7 @@ app.post('/api/action', auth, (req, res) => {
 
 app.post('/api/chat', auth, (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {}
-  const message = String(body.message || '').trim().slice(0, 200)
-  const normalizedMessage = message.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  if (!message) return res.status(400).json({ ok: false, error: 'Digite um comando.' })
-
-  let action = null
-  if (/\b(parar|pare|stop|fica parado)\b/.test(normalizedMessage)) action = 'stop'
-  else if (/\b(pular|pule|jump)\b/.test(normalizedMessage)) action = 'jump'
-  else if (/\b(atacar|ataque|bater)\b/.test(normalizedMessage)) action = 'attack'
-  else if (/\b(frente|andar|avancar|andar para frente)\b/.test(normalizedMessage)) action = 'forward'
-  else if (/\b(re|voltar|tras)\b/.test(normalizedMessage)) action = 'back'
-  else if (/\b(esquerda)\b/.test(normalizedMessage)) action = 'left'
-  else if (/\b(direita)\b/.test(normalizedMessage)) action = 'right'
-  else if (/\b(correr|sprint)\b/.test(normalizedMessage)) action = 'sprint'
-
+  const action = parseCommand(body.message)
   if (!action) {
     return res.status(400).json({
       ok: false,
