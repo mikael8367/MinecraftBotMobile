@@ -140,10 +140,18 @@ class BotMonitoringService : Service() {
     }
 
     private fun setNotificationState(title: String, text: String) {
-        latestTitle = title.take(80)
-        latestText = text.take(MAX_NOTIFICATION_TEXT)
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(latestTitle, latestText))
+        val safeTitle = title.take(80)
+        val safeText = text.take(MAX_NOTIFICATION_TEXT)
+        // All notification updates are serialized on the service's main thread.
+        // This prevents an in-flight HTTP poll from recreating the notification after
+        // the user has disabled monitoring and the foreground notification was removed.
+        handler.post {
+            if (!started) return@post
+            latestTitle = safeTitle
+            latestText = safeText
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification(latestTitle, latestText))
+        }
     }
 
     private fun buildNotification(title: String, text: String): Notification {
@@ -169,7 +177,7 @@ class BotMonitoringService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(0, "Desativar", stopPendingIntent)
+            .addAction(R.drawable.ic_launcher_minecraft, "Desativar", stopPendingIntent)
             .build()
     }
 
@@ -200,6 +208,7 @@ class BotMonitoringService : Service() {
     override fun onDestroy() {
         started = false
         handler.removeCallbacks(pollTask)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 
