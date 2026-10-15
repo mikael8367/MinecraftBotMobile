@@ -350,6 +350,14 @@ class MainActivity : Activity() {
                 val stream=if(code in 200..299) conn.inputStream else conn.errorStream
                 val response=stream.bufferedReader().use { it.readText() }
                 runOnUiThread {
+                    if (code == 401 || code == 403) {
+                        getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().remove("api_access").apply()
+                        status.text = "● Token inválido — informe o token novo"
+                        appendLog("A API recusou o token (HTTP $code). O token salvo foi apagado; toque em uma ação para informar o novo.")
+                        busy = false
+                        conn?.disconnect()
+                        return@runOnUiThread
+                    }
                     val parsed = try { JSONObject(response) } catch (_: Exception) { JSONObject() }
                     val state = parsed.optJSONObject("status")
                     val connected = parsed.optBoolean("connected", state?.optBoolean("connected", false) ?: false)
