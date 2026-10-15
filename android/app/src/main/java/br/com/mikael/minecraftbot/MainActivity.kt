@@ -24,6 +24,10 @@ import java.net.URL
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
+    companion object {
+        private const val REQUEST_MONITOR_NOTIFICATION_PERMISSION = 7301
+    }
+
     private val bg = Color.rgb(10, 17, 14)
     private val panel = Color.rgb(21, 32, 26)
     private val green = Color.rgb(89, 231, 126)
