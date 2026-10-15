@@ -139,8 +139,26 @@ class MainActivity : Activity() {
         val statusCard = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(15,12,15,12) }
         statusCard.addView(text("STATUS DO BOT",10,muted,true))
         status = text("●  Desconectado",15,white,true); statusCard.addView(status)
-        logs = text("Aguardando tentativa de conexão...",11,white,false).apply { setTextIsSelectable(true); setPadding(dp(8),dp(8),dp(8),dp(8)) }
+        logs = text("Aguardando tentativa de conexão...",11,white,false).apply {
+            setTextIsSelectable(true)
+            setPadding(dp(8),dp(8),dp(8),dp(8))
+            visibility = View.GONE
+            background = rounded(Color.rgb(10,22,15),10)
+        }
         statusCard.addView(logs)
+        val logsToggle = Button(this).apply {
+            text = "MOSTRAR LOGS"
+            isAllCaps = false
+            textSize = 11f
+            setTextColor(white)
+            background = rounded(Color.rgb(43,61,49),9)
+            setOnClickListener {
+                val showLogs = logs.visibility != View.VISIBLE
+                logs.visibility = if (showLogs) View.VISIBLE else View.GONE
+                text = if (showLogs) "OCULTAR LOGS" else "MOSTRAR LOGS"
+            }
+        }
+        statusCard.addView(logsToggle, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(6) })
 
         val monitoringRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -161,6 +179,25 @@ class MainActivity : Activity() {
         monitoringRow.addView(monitoringSwitch)
         monitoringSwitch.setOnCheckedChangeListener { _, enabled -> setForegroundMonitoring(enabled) }
         statusCard.addView(monitoringRow)
+        val disableBotButton = Button(this).apply {
+            text = "DESATIVAR BOT"
+            isAllCaps = false
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+            background = rounded(Color.rgb(117, 47, 47), 11)
+            setOnClickListener {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Desativar bot?")
+                    .setMessage("O bot será desconectado do servidor Minecraft.")
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("DESATIVAR") { _, _ ->
+                        request("POST", "/api/disconnect", JSONObject())
+                    }
+                    .show()
+            }
+        }
+        statusCard.addView(disableBotButton, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
         root.addView(statusCard, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
 
         val botHome = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; background=rounded(panel,16); setPadding(dp(14),dp(14),dp(14),dp(14)) }
@@ -637,6 +674,7 @@ class MainActivity : Activity() {
 
                     status.text = when {
                         path == "/api/server-check" && code in 200..299 -> "● SERVIDOR: " + parsed.optString("message", "Verificação concluída")
+                        path == "/api/disconnect" && code in 200..299 -> "● BOT OFF — desconectado pelo aplicativo"
                         code !in 200..299 -> "● API com erro (HTTP $code)"
                         (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao mundo"
                         (path == "/api/status" || path == "/api/connect") && deviceCode.isNotBlank() -> "● AUTENTICAÇÃO MICROSOFT — código $deviceCode"
