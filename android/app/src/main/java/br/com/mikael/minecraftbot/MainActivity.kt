@@ -208,7 +208,7 @@ class MainActivity : Activity() {
                 monitoringSwitch.setOnCheckedChangeListener(null)
                 monitoringSwitch.isChecked = false
                 monitoringSwitch.setOnCheckedChangeListener { _, checked -> setForegroundMonitoring(checked) }
-                Toast.makeText(this, "Não foi possível iniciar o monitoramento: ${'$'}{error.message ?: "erro desconhecido"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Não foi possível iniciar o monitoramento: ${error.message ?: "erro desconhecido"}", Toast.LENGTH_LONG).show()
             }
         } else {
             stopService(serviceIntent)
