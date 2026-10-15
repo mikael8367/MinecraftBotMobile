@@ -8,6 +8,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.*
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -29,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var target: EditText
     private lateinit var command: EditText
     private lateinit var status: TextView
+    private lateinit var logs: TextView
     private lateinit var tabButtons: List<TextView>
     private var busy = false
     private var selectedTab = 0
@@ -62,7 +66,7 @@ class MainActivity : Activity() {
         root.addView(statusCard, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
 
         val tabs = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; background=rounded(panel,14); setPadding(4,4,4,4) }
-        val names = listOf("⌁  Conectar","✣  Controle","✦  IA")
+        val names = listOf("🤖  Bots","✣  Controle","✦  IA")
         tabButtons = names.mapIndexed { i, name ->
             val t = text(name,12,muted,true).apply { gravity=Gravity.CENTER; setPadding(3,13,3,13); background=rounded(if(i==0) green else panel,11); setOnClickListener { showTab(i) } }
             tabs.addView(t,LinearLayout.LayoutParams(0,-2,1f)); t
@@ -90,8 +94,21 @@ class MainActivity : Activity() {
         version=Spinner(this)
         version.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item, mutableListOf("auto","Carregando versões..."))
         p.addView(version)
-        button(p,"CONECTAR BOT",true) { request("POST","/api/connect",JSONObject().put("host",host.text.toString().trim()).put("port",port.text.toString().toIntOrNull()?:25565).put("username",username.text.toString().trim()).put("version",version.selectedItem.toString())) }
-        button(p,"ATUALIZAR STATUS",false) { request("GET","/api/status",JSONObject()) }
+        button(p,"▶ LIGAR BOT",true) {
+            appendLog("Solicitando conexão com ${host.text.toString().trim()}:${port.text.toString().trim()}...")
+            request("POST","/api/connect",JSONObject().put("host",host.text.toString().trim()).put("port",port.text.toString().toIntOrNull()?:25565).put("username",username.text.toString().trim()).put("version",version.selectedItem.toString()))
+        }
+        button(p,"⟳ VERIFICAR SE ESTÁ ON",false) { request("GET","/api/status",JSONObject()) }
+        p.addView(text("LOGS DE CONEXÃO",11,muted,true).apply { setPadding(0,16,0,6) })
+        logs=text("Aguardando tentativa de conexão...",12,white,false).apply {
+            setTextIsSelectable(true); setPadding(dp(10),dp(10),dp(10),dp(10)); background=rounded(Color.rgb(9,18,13),10)
+        }
+        p.addView(logs,LinearLayout.LayoutParams(-1,dp(145)))
+        button(p,"COPIAR LOG",false) {
+            val clipboard=getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("MinecraftBotMobile log",logs.text.toString()))
+            Toast.makeText(this,"Log copiado",Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun loadMinecraftVersions() {
@@ -195,6 +212,12 @@ class MainActivity : Activity() {
     private fun outline(color:Int,radius:Int)=GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius=dp(radius).toFloat(); setStroke(dp(1),color) }
     private fun dp(n:Int)= (n*resources.displayMetrics.density).toInt()
 
+    private fun appendLog(message:String) {
+        if (!::logs.isInitialized) return
+        val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        logs.text = (logs.text.toString() + "\n[" + stamp + "] " + message).takeLast(12000)
+    }
+
     private fun request(method:String,path:String,body:JSONObject) {
         val base=BuildConfig.API_BASE_URL
         val secret=getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("api_access", "")?.trim().orEmpty()
@@ -221,8 +244,26 @@ class MainActivity : Activity() {
                 val code=conn.responseCode
                 val stream=if(code in 200..299) conn.inputStream else conn.errorStream
                 val response=stream.bufferedReader().use { it.readText() }
-                runOnUiThread { status.text=(if(code in 200..299) "●  Resposta recebida" else "●  Erro HTTP $code")+"\n"+response.take(240) }
-            } catch(e:Exception) { runOnUiThread { status.text="●  Falha: ${e.message?: "sem conexão"}" } }
+                runOnUiThread {
+                    val parsed = try { JSONObject(response) } catch (_: Exception) { JSONObject() }
+                    val state = parsed.optJSONObject("status")
+                    val connected = parsed.optBoolean("connected", state?.optBoolean("connected", false) ?: false)
+                    val serverError = parsed.optString("error").ifBlank { state?.optString("lastError", "") ?: "" }
+                    status.text = when {
+                        code !in 200..299 -> "● Servidor/API com erro (HTTP $code)"
+                        (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao servidor"
+                        (path == "/api/status" || path == "/api/connect") && serverError.isNotBlank() -> "● BOT OFF — $serverError"
+                        path == "/api/status" || path == "/api/connect" -> "● Tentando conectar / ainda offline"
+                        else -> "● Resposta recebida"
+                    }
+                    appendLog("HTTP $code $path\n$response")
+                    if (serverError.isNotBlank()) appendLog("ERRO: $serverError")
+                    if (path == "/api/connect" && code in 200..299) appendLog("Tentativa iniciada. Verifique o status em seguida.")
+                }
+            } catch(e:Exception) { runOnUiThread {
+                status.text="● FALHA DE CONEXÃO"
+                appendLog("ERRO DE REDE: ${e.message ?: "sem conexão"}")
+            } }
             finally { conn?.disconnect(); runOnUiThread { busy=false } }
         }
     }
