@@ -249,7 +249,11 @@ app.post('/api/connect', auth, (req, res) => {
       if (bot !== activeBot) return
       clearConnectionTimer()
       const detectedVersion = String(activeBot.version || '')
-      const modernProtocol = detectedVersion.startsWith('26.')
+      const negotiatedProtocol = Number(activeBot.protocolVersion ?? (activeBot._client && activeBot._client.protocolVersion))
+      // 26.1 starts at protocol 775. Keep pathfinder disabled for this and all
+      // later protocol IDs until its independent physics support is verified.
+      const modernProtocol = detectedVersion.startsWith('26.') ||
+        (Number.isInteger(negotiatedProtocol) && negotiatedProtocol >= 775)
       let canPathfind = false
       if (!modernProtocol) {
         try {
