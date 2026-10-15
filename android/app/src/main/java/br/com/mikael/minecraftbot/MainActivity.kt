@@ -237,17 +237,7 @@ class MainActivity : Activity() {
         root.addView(botHome, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
         refreshBotList()
 
-        val tabs = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; background=rounded(panel,14); setPadding(4,4,4,4) }
-        val names = listOf("🤖  Meus Bots","✣  Controle","✦  IA")
-        tabButtons = names.mapIndexed { i, name ->
-            val t = text(name,12,muted,true).apply { gravity=Gravity.CENTER; setPadding(3,13,3,13); background=rounded(if(i==0) green else panel,11); setOnClickListener { showTab(i) } }
-            tabs.addView(t,LinearLayout.LayoutParams(0,-2,1f)); t
-        }
-        root.addView(tabs,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=14 })
-        pages = FrameLayout(this)
-        root.addView(pages,LinearLayout.LayoutParams(-1,0,1f))
-        buildBotsInfoPage(); buildControlPage(); buildAiPage()
-        showTab(0)
+        // Controles e comandos de IA ficam dentro das configurações de cada bot.
         loadEngineCapabilities()
         request("POST", "/api/settings/auto-reconnect", JSONObject().put(
             "enabled",
@@ -462,6 +452,24 @@ class MainActivity : Activity() {
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("As versões listadas vêm dos metadados da biblioteca; este app ainda não testou todas em servidores reais.",11,muted,false))
+        form.addView(text("FERRAMENTAS DO BOT", 11, green, true).apply { setPadding(0, dp(18), 0, dp(5)) })
+        form.addView(text("Conecte este bot com o botão LIGAR na tela principal antes de enviar ações.", 11, muted, false).apply { setPadding(0, 0, 0, dp(6)) })
+        val controlsButton = Button(this).apply {
+            text = "🎮  CONTROLES DO BOT"
+            isAllCaps = false
+            setTextColor(bg)
+            background = rounded(green, 11)
+            setOnClickListener { showBotControlsDialog(item) }
+        }
+        form.addView(controlsButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(5) })
+        val aiButton = Button(this).apply {
+            text = "✦  COMANDOS IA"
+            isAllCaps = false
+            setTextColor(white)
+            background = rounded(Color.rgb(43, 61, 49), 11)
+            setOnClickListener { showBotAiDialog(item) }
+        }
+        form.addView(aiButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(7) })
         val dialog = AlertDialog.Builder(this).setTitle("⚙  Configurações do bot").setView(ScrollView(this).apply { isFillViewport = true; addView(form) })
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
         dialog.setOnShowListener {
@@ -490,6 +498,109 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun showBotControlsDialog(item: JSONObject) {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(12))
+            setBackgroundColor(bg)
+        }
+        content.addView(text("Controlando: " + item.optString("name", "Bot"), 14, green, true))
+        content.addView(text("As ações vão para o bot atualmente conectado no servidor.", 11, muted, false).apply { setPadding(0, dp(4), 0, dp(10)) })
+        val grid = GridLayout(this).apply { columnCount = 3 }
+        content.addView(grid)
+        fun action(label: String, command: String) {
+            val b = Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 12f
+                setTextColor(white)
+                background = rounded(Color.rgb(38, 62, 46), 11)
+                setOnClickListener {
+                    request("POST", "/api/action", JSONObject().put("action", command))
+                }
+            }
+            grid.addView(b, GridLayout.LayoutParams().apply {
+                width = 0
+                height = dp(54)
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            })
+        }
+        action("↑ Frente", "forward")
+        action("⤒ Pular", "jump")
+        action("⚡ Sprint", "sprint")
+        action("← Esquerda", "left")
+        action("■ Parar", "stop")
+        action("Direita →", "right")
+        action("↓ Ré", "back")
+        action("⚔ Atacar", "attack")
+        val targetField = EditText(this).apply {
+            hint = "Nome exato do jogador"
+            setSingleLine(true)
+            styleBotInput(this)
+        }
+        content.addView(text("SEGUIR JOGADOR", 10, muted, true).apply { setPadding(0, dp(12), 0, dp(3)) })
+        content.addView(targetField, LinearLayout.LayoutParams(-1, dp(48)))
+        val follow = Button(this).apply {
+            text = "SEGUIR"
+            isAllCaps = false
+            setTextColor(bg)
+            background = rounded(green, 11)
+            setOnClickListener {
+                val name = targetField.text.toString().trim()
+                if (name.isBlank()) {
+                    targetField.error = "Digite o nome do jogador"
+                } else {
+                    request("POST", "/api/action", JSONObject().put("action", "follow").put("target", name))
+                }
+            }
+        }
+        content.addView(follow, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(7) })
+        AlertDialog.Builder(this)
+            .setTitle("🎮 Controles do bot")
+            .setView(ScrollView(this).apply { isFillViewport = true; addView(content) })
+            .setNegativeButton("Fechar", null)
+            .show()
+    }
+
+    private fun showBotAiDialog(item: JSONObject) {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setBackgroundColor(bg)
+        }
+        content.addView(text("Comandos para: " + item.optString("name", "Bot"), 14, green, true))
+        content.addView(text("Exemplos: andar, pular, atacar ou parar. A IA online ainda não está conectada.", 11, muted, false).apply {
+            setPadding(0, dp(5), 0, dp(12))
+        })
+        val commandField = EditText(this).apply {
+            hint = "O que o bot deve fazer?"
+            setSingleLine(true)
+            styleBotInput(this)
+        }
+        content.addView(commandField, LinearLayout.LayoutParams(-1, dp(48)))
+        val send = Button(this).apply {
+            text = "ENVIAR COMANDO"
+            isAllCaps = false
+            setTextColor(bg)
+            background = rounded(green, 11)
+            setOnClickListener {
+                val message = commandField.text.toString().trim()
+                if (message.isBlank()) {
+                    commandField.error = "Digite um comando"
+                } else {
+                    request("POST", "/api/chat", JSONObject().put("message", message))
+                }
+            }
+        }
+        content.addView(send, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(9) })
+        AlertDialog.Builder(this)
+            .setTitle("✦ Comandos IA")
+            .setView(content)
+            .setNegativeButton("Fechar", null)
+            .show()
     }
 
     private fun showCreateBotDialog() {
