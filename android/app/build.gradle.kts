@@ -6,9 +6,9 @@ android {
         applicationId = "br.com.mikael.minecraftbot"
         minSdk = 26
         targetSdk = 28
-        versionCode = 2
-        versionName = "0.2.0"
-        buildConfigField("String", "API_BASE_URL", "\"https://minecraftbotmobile.onrender.com\"")
+        versionCode = 3
+        versionName = "0.3.0"
+        buildConfigField("String", "API_BASE_URL", "\"https://minecraftbotmobile-1.onrender.com\"")
     }
     buildFeatures {
         buildConfig = true
