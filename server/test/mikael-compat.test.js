@@ -28,15 +28,24 @@ function makeBot (version = '26.3', protocolVersion = 777) {
   return { bot, client, writes }
 }
 
-test('26.3 compatibility gate does not turn on for older protocols', () => {
-  const { bot } = makeBot('26.2', 776)
-  assert.equal(is26_3(bot, 'auto'), false)
-  assert.equal(is26_3(bot, '26.3'), true)
+test('compatibility gate follows negotiated protocol, not requested version', () => {
+  const { bot, client, writes } = makeBot('26.2', 776)
+  assert.equal(is26_3(bot), false)
+  assert.equal(is26_3(bot, '26.3'), false)
+
+  installMikaelCompatibility(bot, '26.3')
+  client.write('block_dig', { status: 5 })
+  assert.equal(writes.at(-1).params.status, 5)
+})
+
+test('compatibility can use the resolved version when protocol metadata is absent', () => {
+  const { bot } = makeBot('26.3', null)
+  assert.equal(is26_3(bot), true)
 })
 
 test('26.3 shifts legacy block_dig status IDs without mutating caller payload', () => {
   const { bot, client, writes } = makeBot()
-  installMikaelCompatibility(bot, '26.3')
+  installMikaelCompatibility(bot)
   for (const [before, after] of [[0, 0], [1, 2], [2, 3], [5, 6], [6, 7]]) {
     const body = { status: before, location: { x: 0, y: 0, z: 0 } }
     client.write('block_dig', body)
@@ -49,7 +58,7 @@ test('26.3 shifts legacy block_dig status IDs without mutating caller payload', 
 
 test('26.3 normalizes multi-step relative entity deltas for the existing listener', () => {
   const { bot, client } = makeBot()
-  installMikaelCompatibility(bot, '26.3')
+  installMikaelCompatibility(bot)
   let received
   client.on('rel_entity_move', packet => { received = packet })
   client.emit('rel_entity_move', {
@@ -62,7 +71,7 @@ test('26.3 normalizes multi-step relative entity deltas for the existing listene
 
 test('26.3 stepped position uses the final absolute position and preserves velocity', () => {
   const { bot, client } = makeBot()
-  installMikaelCompatibility(bot, '26.3')
+  installMikaelCompatibility(bot)
   let received
   client.on('sync_entity_position', packet => { received = packet })
   client.emit('sync_entity_position', {
@@ -76,20 +85,33 @@ test('26.3 stepped position uses the final absolute position and preserves veloc
   assert.deepEqual([received.dx, received.dy, received.dz], [0.1, 0.2, 0.3])
 })
 
-test('26.3 linear position preserves velocity when packet omits it', () => {
+test('26.3 empty stepped path preserves the last known position and velocity', () => {
   const { bot, client } = makeBot()
-  installMikaelCompatibility(bot, '26.3')
+  installMikaelCompatibility(bot)
   let received
   client.on('sync_entity_position', packet => { received = packet })
   client.emit('sync_entity_position', {
-    entityId: 12, positionType: 'linear', x: 4, y: 5, z: 6, yaw: 0, pitch: 0
+    entityId: 12, positionType: 'stepped', steps: [], yaw: 0, pitch: 0
   })
+  assert.deepEqual([received.x, received.y, received.z], [1, 2, 3])
+  assert.deepEqual([received.dx, received.dy, received.dz], [0.1, 0.2, 0.3])
+})
+
+test('26.3 linear position preserves velocity and falls back from invalid coordinates', () => {
+  const { bot, client } = makeBot()
+  installMikaelCompatibility(bot)
+  let received
+  client.on('sync_entity_position', packet => { received = packet })
+  client.emit('sync_entity_position', {
+    entityId: 12, positionType: 'linear', x: NaN, y: undefined, z: 6, yaw: 0, pitch: 0
+  })
+  assert.deepEqual([received.x, received.y, received.z], [1, 2, 6])
   assert.deepEqual([received.dx, received.dy, received.dz], [0.1, 0.2, 0.3])
 })
 
 test('compatibility shim leaves 26.2 packets unchanged', () => {
   const { bot, client, writes } = makeBot('26.2', 776)
-  installMikaelCompatibility(bot, 'auto')
+  installMikaelCompatibility(bot)
   client.write('block_dig', { status: 5 })
   assert.equal(writes.at(-1).params.status, 5)
   let received
