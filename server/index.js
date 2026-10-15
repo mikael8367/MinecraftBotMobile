@@ -1,165 +1,395 @@
-const express = require('express');
-const mineflayer = require('mineflayer');
-const mineflayerMikael = require('mineflayer-mikael');
-const { pathfinder, goals } = require('mineflayer-pathfinder');
+'use strict'
 
-const app = express();
-app.use(express.json({ limit: '32kb' }));
+const express = require('express')
+const crypto = require('node:crypto')
+const { pathfinder, goals } = require('mineflayer-pathfinder')
+const { engines, capabilities } = require('./engine-registry')
+const { ValidationError, validateConnectionPayload } = require('./connection-validation')
 
-const PORT = Number(process.env.PORT || 10000);
-const API_TOKEN = process.env.API_TOKEN;
-let bot = null;
-let botInfo = { connected: false, username: null, host: null, port: null, version: null, health: null, food: null, position: null, lastError: null };
+const app = express()
+app.use(express.json({ limit: '32kb' }))
 
-function auth(req, res, next) {
-  if (!API_TOKEN) return res.status(503).json({ error: 'Backend sem configuração: defina API_TOKEN nas Environment Variables.' });
-  const header = req.get('authorization') || '';
-  const supplied = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (supplied.length !== API_TOKEN.length || !require('crypto').timingSafeEqual(Buffer.from(supplied), Buffer.from(API_TOKEN))) {
-    return res.status(401).json({ error: 'Token da API inválido.' });
-  }
-  next();
+const PORT = Number(process.env.PORT || 10000)
+const API_TOKEN = process.env.API_TOKEN
+const CONNECT_TIMEOUT_MS = Number(process.env.CONNECT_TIMEOUT_MS || 30000)
+let bot = null
+let connectionTimer = null
+const controlTimers = new Map()
+
+let botInfo = {
+  connected: false,
+  connectionState: 'disconnected',
+  username: null,
+  host: null,
+  port: null,
+  version: null,
+  serverVersion: null,
+  engine: null,
+  pathfindingAvailable: false,
+  health: null,
+  food: null,
+  position: null,
+  lastError: null,
+  updatedAt: new Date().toISOString()
 }
-function status() {
-  if (bot) {
-    botInfo.connected = bot.entity != null;
-    botInfo.health = bot.health ?? null;
-    botInfo.food = bot.food ?? null;
-    const p = bot.entity?.position;
-    botInfo.position = p ? { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100, z: Math.round(p.z * 100) / 100 } : null;
-  }
-  return botInfo;
+
+function updateBotInfo (patch) {
+  botInfo = { ...botInfo, ...patch, updatedAt: new Date().toISOString() }
 }
-app.get('/', (_req, res) => res.json({ service: 'MinecraftBotMobile backend', ok: true }));
-app.get('/health', (_req, res) => res.json({ ok: true }));
-app.get('/api/status', auth, (_req, res) => res.json(status()));
+
+function auth (req, res, next) {
+  if (!API_TOKEN) {
+    return res.status(503).json({ ok: false, error: 'Backend sem configuração: defina API_TOKEN nas Environment Variables do Render.' })
+  }
+  const header = req.get('authorization') || ''
+  const supplied = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '', 'utf8')
+  const expected = Buffer.from(API_TOKEN, 'utf8')
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    return res.status(401).json({ ok: false, error: 'Token da API inválido.' })
+  }
+  next()
+}
+
+function reasonText (reason) {
+  if (reason == null) return ''
+  if (typeof reason === 'string') return reason.slice(0, 500)
+  try { return JSON.stringify(reason).slice(0, 500) } catch (_) { return String(reason).slice(0, 500) }
+}
+
+function clearConnectionTimer () {
+  if (connectionTimer) clearTimeout(connectionTimer)
+  connectionTimer = null
+}
+
+function clearControlTimers () {
+  for (const timer of controlTimers.values()) clearTimeout(timer)
+  controlTimers.clear()
+}
+
+function stopMovement (activeBot) {
+  clearControlTimers()
+  if (!activeBot) return
+  try { activeBot.pathfinder?.setGoal(null) } catch (_) {}
+  for (const control of ['forward', 'back', 'left', 'right', 'jump', 'sprint', 'sneak']) {
+    try { activeBot.setControlState(control, false) } catch (_) {}
+  }
+}
+
+function disconnectCurrentBot (reason = 'Desconectado pelo aplicativo') {
+  const oldBot = bot
+  bot = null
+  clearConnectionTimer()
+  stopMovement(oldBot)
+  if (oldBot) {
+    try { oldBot.quit(reason) } catch (_) {
+      try { oldBot.end(reason) } catch (_) {}
+    }
+  }
+  updateBotInfo({
+    connected: false,
+    connectionState: 'disconnected',
+    serverVersion: null,
+    pathfindingAvailable: false,
+    health: null,
+    food: null,
+    position: null,
+    lastError: null
+  })
+}
+
+function getStatus () {
+  let health = null
+  let food = null
+  let position = null
+  if (bot && botInfo.connected && bot.entity) {
+    health = Number.isFinite(bot.health) ? bot.health : null
+    food = Number.isFinite(bot.food) ? bot.food : null
+    const p = bot.entity.position
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      position = {
+        x: Math.round(p.x * 100) / 100,
+        y: Math.round(p.y * 100) / 100,
+        z: Math.round(p.z * 100) / 100
+      }
+    }
+  }
+  return { ...botInfo, health, food, position }
+}
+
+function requireConnectedBot () {
+  if (!bot || !botInfo.connected || !bot.entity) {
+    throw new ValidationError('O bot ainda não está conectado ao mundo.', 409)
+  }
+  return bot
+}
+
+function pressControl (activeBot, action, durationMs) {
+  const previousTimer = controlTimers.get(action)
+  if (previousTimer) clearTimeout(previousTimer)
+  activeBot.setControlState(action, true)
+  const timer = setTimeout(() => {
+    controlTimers.delete(action)
+    if (bot === activeBot) {
+      try { activeBot.setControlState(action, false) } catch (_) {}
+    }
+  }, durationMs)
+  if (typeof timer.unref === 'function') timer.unref()
+  controlTimers.set(action, timer)
+}
+
+function executeAction (actionValue, payload = {}) {
+  const activeBot = requireConnectedBot()
+  const action = String(actionValue || '').trim().toLowerCase()
+  const controls = new Set(['forward', 'back', 'left', 'right', 'jump', 'sprint'])
+  if (controls.has(action)) {
+    pressControl(activeBot, action, action === 'sprint' ? 1200 : 700)
+    return { ok: true, message: 'Ação executada: ' + action }
+  }
+
+  if (action === 'stop') {
+    stopMovement(activeBot)
+    return { ok: true, message: 'Movimento e caminho interrompidos.' }
+  }
+
+  if (action === 'attack') {
+    const position = activeBot.entity.position
+    const target = activeBot.nearestEntity((entity) =>
+      entity &&
+      entity.type === 'player' &&
+      entity.username !== activeBot.username &&
+      entity.position &&
+      entity.position.distanceTo(position) < 4
+    )
+    if (!target) throw new ValidationError('Nenhum jogador visível por perto para atacar.', 404)
+    activeBot.attack(target)
+    return { ok: true, message: 'Ataque enviado.' }
+  }
+
+  if (action === 'follow') {
+    if (!botInfo.pathfindingAvailable || !activeBot.pathfinder) {
+      throw new ValidationError('Seguir jogador está indisponível neste modo experimental: o pathfinder não foi validado para esta versão.', 501)
+    }
+    const name = String(payload.target || '').trim()
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) {
+      throw new ValidationError('Informe o nome exato do jogador (1 a 16 caracteres).')
+    }
+    const player = activeBot.players && activeBot.players[name] && activeBot.players[name].entity
+    if (!player || !player.position) throw new ValidationError('Jogador não encontrado ou não está visível.', 404)
+    activeBot.pathfinder.setGoal(new goals.GoalFollow(player, 2), true)
+    return { ok: true, message: 'Seguindo ' + name }
+  }
+
+  throw new ValidationError('Ação desconhecida.')
+}
+
+app.get('/', (_req, res) => res.json({ service: 'MinecraftBotMobile backend', ok: true }))
+app.get('/health', (_req, res) => res.json({ ok: true }))
+app.get('/api/capabilities', (_req, res) => res.json({ ok: true, ...capabilities() }))
+app.get('/api/status', auth, (_req, res) => res.json({ ok: true, status: getStatus() }))
 
 app.post('/api/connect', auth, (req, res) => {
-  const host = String(req.body.host || '').trim();
-  const port = Number(req.body.port || 25565);
-  const username = String(req.body.username || 'MikaelBot').trim().slice(0, 16);
-  const requestedVersion = String(req.body.version || 'auto');
-  const requestedEngine = String(req.body.engine || 'mikael').toLowerCase();
-  if (!['mikael', 'official'].includes(requestedEngine)) return res.status(400).json({ error: 'Motor inválido. Use mikael ou official.' });
-  if (requestedVersion === '26.3' && requestedEngine === 'official') return res.status(400).json({ error: 'O Mineflayer normal não declara suporte a 26.3. Selecione Mineflayer Mikael (experimental).' });
-  if (!host || host.length > 253) return res.status(400).json({ error: 'Informe um endereço de servidor válido.' });
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return res.status(400).json({ error: 'Porta inválida.' });
-  if (!username) return res.status(400).json({ error: 'Nome do bot inválido.' });
-  if (bot) { try { bot.quit('Nova conexão solicitada'); } catch (_) {} bot = null; }
-  botInfo = { connected: false, username, host, port, version: requestedVersion, engine: requestedEngine, health: null, food: null, position: null, lastError: null };
+  let options
   try {
-    const selectedMineflayer = requestedEngine === 'mikael' ? mineflayerMikael : mineflayer;
-    const activeBot = selectedMineflayer.createBot({ host, port, username, version: requestedVersion === 'auto' ? false : requestedVersion, auth: 'offline', hideErrors: false });
-    bot = activeBot;
-    activeBot.loadPlugin(pathfinder);
-    activeBot.once('spawn', () => {
-      if (bot !== activeBot) return;
-      botInfo.connected = true;
-      botInfo.lastError = null;
-    });
-    activeBot.on('end', () => {
-      if (bot !== activeBot) return;
-      botInfo.connected = false;
-      botInfo.position = null;
-    });
-    activeBot.on('kicked', (reason) => {
-      if (bot !== activeBot) return;
-      botInfo.connected = false;
-      botInfo.lastError = 'Conexão recusada: ' + String(reason).slice(0, 300);
-    });
-    activeBot.on('error', (err) => {
-      if (bot !== activeBot) return;
-      botInfo.lastError = String(err.message || err).slice(0, 300);
-    });
-    const connectionTimer = setTimeout(() => {
-      if (bot === activeBot && !activeBot.entity) {
-        botInfo.lastError = 'Tempo limite de conexão excedido. Confira o endereço, a porta, a versão e se o servidor Aternos está ligado.';
-        try { activeBot.quit('Tempo limite de conexão'); } catch (_) {}
-      }
-    }, 25000);
-    activeBot.once('spawn', () => clearTimeout(connectionTimer));
-    activeBot.once('end', () => clearTimeout(connectionTimer));
-    return res.json({ ok: true, message: 'Tentativa de conexão iniciada. Consulte /api/status.', status: status() });
-  } catch (err) {
-    botInfo.lastError = String(err.message || err);
-    return res.status(500).json({ error: botInfo.lastError });
+    options = validateConnectionPayload(req.body, engines)
+  } catch (error) {
+    if (error instanceof ValidationError) return res.status(error.statusCode).json({ ok: false, error: error.message })
+    return res.status(400).json({ ok: false, error: 'Configuração de conexão inválida.' })
   }
-});
+
+  disconnectCurrentBot('Substituído por uma nova conexão')
+  const engine = engines[options.engine]
+  updateBotInfo({
+    connected: false,
+    connectionState: 'connecting',
+    username: options.username,
+    host: options.host,
+    port: options.port,
+    version: options.version,
+    serverVersion: null,
+    engine: options.engine,
+    pathfindingAvailable: false,
+    health: null,
+    food: null,
+    position: null,
+    lastError: null
+  })
+
+  let activeBot = null
+  try {
+    activeBot = engine.createBot({
+      host: options.host,
+      port: options.port,
+      username: options.username,
+      version: options.version === 'auto' ? false : options.version,
+      auth: 'offline',
+      hideErrors: false,
+      logErrors: false
+    })
+    bot = activeBot
+
+    // pathfinder's own world/physics stack is a separate dependency; don't load it
+    // for explicitly selected 26.x until compatibility with those protocols is verified.
+    const explicitlyModernProtocol = options.version.startsWith('26.')
+    if (!explicitlyModernProtocol) activeBot.loadPlugin(pathfinder)
+
+    activeBot.once('spawn', () => {
+      if (bot !== activeBot) return
+      clearConnectionTimer()
+      const detectedVersion = String(activeBot.version || '')
+      const modernProtocol = detectedVersion.startsWith('26.')
+      const canPathfind = Boolean(activeBot.pathfinder) && !modernProtocol
+      updateBotInfo({
+        connected: true,
+        connectionState: 'connected',
+        serverVersion: detectedVersion || null,
+        pathfindingAvailable: canPathfind,
+        lastError: null
+      })
+      if (modernProtocol && activeBot.pathfinder) {
+        updateBotInfo({ pathfindingAvailable: false })
+      }
+    })
+
+    activeBot.on('kicked', (reason) => {
+      if (bot !== activeBot) return
+      clearConnectionTimer()
+      const detail = reasonText(reason)
+      updateBotInfo({
+        connected: false,
+        connectionState: 'kicked',
+        position: null,
+        lastError: 'O servidor recusou a entrada: ' + (detail || 'motivo não informado')
+      })
+      clearControlTimers()
+    })
+
+    activeBot.on('error', (error) => {
+      if (bot !== activeBot) return
+      const message = String(error && (error.message || error) || 'Erro desconhecido').slice(0, 500)
+      updateBotInfo({
+        connectionState: botInfo.connected ? 'connected' : 'error',
+        lastError: message
+      })
+      console.error('[bot:error]', JSON.stringify({
+        engine: options.engine,
+        version: options.version,
+        host: options.host,
+        message
+      }))
+    })
+
+    activeBot.on('end', (reason) => {
+      clearConnectionTimer()
+      clearControlTimers()
+      if (bot !== activeBot) return
+      const endedState = botInfo.connectionState
+      const detail = reasonText(reason)
+      let nextState = endedState
+      if (!['timeout', 'kicked'].includes(endedState)) {
+        nextState = botInfo.lastError ? 'error' : 'disconnected'
+      }
+      updateBotInfo({
+        connected: false,
+        connectionState: nextState,
+        position: null,
+        pathfindingAvailable: false,
+        lastError: botInfo.lastError || (detail && detail !== 'socketClosed' ? 'Conexão encerrada: ' + detail : null)
+      })
+    })
+
+    connectionTimer = setTimeout(() => {
+      if (bot !== activeBot || botInfo.connected) return
+      updateBotInfo({
+        connected: false,
+        connectionState: 'timeout',
+        lastError: 'Tempo limite de conexão excedido. Confira o IP, a porta, a versão e se o servidor está ligado.'
+      })
+      try { activeBot.quit('Tempo limite de conexão') } catch (_) {}
+    }, Math.max(10000, Math.min(CONNECT_TIMEOUT_MS, 90000)))
+    if (typeof connectionTimer.unref === 'function') connectionTimer.unref()
+
+    return res.status(202).json({
+      ok: true,
+      message: 'Tentativa iniciada. O estado real será atualizado em /api/status.',
+      status: getStatus()
+    })
+  } catch (error) {
+    clearConnectionTimer()
+    if (bot === activeBot) bot = null
+    if (activeBot) {
+      try { activeBot.end('Falha ao iniciar a conexão') } catch (_) {}
+    }
+    const message = String(error && (error.message || error) || 'Falha ao iniciar conexão').slice(0, 500)
+    updateBotInfo({
+      connected: false,
+      connectionState: 'error',
+      pathfindingAvailable: false,
+      lastError: message
+    })
+    console.error('[connect:error]', JSON.stringify({ engine: options.engine, version: options.version, message }))
+    return res.status(500).json({ ok: false, error: message, status: getStatus() })
+  }
+})
 
 app.post('/api/action', auth, (req, res) => {
-  if (!bot || !bot.entity) return res.status(409).json({ error: 'O bot ainda não está conectado.' });
-  const activeBot = bot;
-  const action = String(req.body.action || '');
-  const controls = ['forward', 'back', 'left', 'right', 'jump', 'sprint'];
-  if (controls.includes(action)) {
-    activeBot.setControlState(action, true);
-    const stopAfter = action === 'sprint' ? 1200 : 700;
-    setTimeout(() => {
-      if (bot === activeBot) {
-        try { activeBot.setControlState(action, false); } catch (_) {}
-      }
-    }, stopAfter);
-    return res.json({ ok: true, message: 'Ação executada: ' + action });
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    return res.json(executeAction(body.action, body))
+  } catch (error) {
+    const statusCode = error instanceof ValidationError ? error.statusCode : 500
+    const message = String(error && (error.message || error) || 'Falha ao executar ação').slice(0, 500)
+    if (statusCode >= 500) console.error('[action:error]', message)
+    return res.status(statusCode).json({ ok: false, error: message })
   }
-  if (action === 'stop') {
-    for (const c of ['forward','back','left','right','jump','sprint','sneak']) bot.setControlState(c, false);
-    return res.json({ ok: true, message: 'Movimento parado.' });
-  }
-  if (action === 'attack') {
-    const target = bot.nearestEntity(e => e.type === 'player' && e.username !== bot.username && e.position.distanceTo(bot.entity.position) < 4);
-    if (!target) return res.status(404).json({ error: 'Nenhum jogador por perto para atacar.' });
-    bot.attack(target);
-    return res.json({ ok: true, message: 'Ataque enviado.' });
-  }
-  if (action === 'follow') {
-    const name = String(req.body.target || '').trim();
-    const player = bot.players[name]?.entity;
-    if (!name || !player) return res.status(404).json({ error: 'Jogador não encontrado ou não está visível.' });
-    bot.pathfinder.setGoal(new goals.GoalFollow(player, 2), true);
-    return res.json({ ok: true, message: 'Seguindo ' + name });
-  }
-  return res.status(400).json({ error: 'Ação desconhecida.' });
-});
+})
 
 app.post('/api/chat', auth, (req, res) => {
-  if (!bot || !bot.entity) return res.status(409).json({ error: 'Conecte o bot a um servidor primeiro.' });
-  const activeBot = bot;
-  const message = String(req.body.message || '').trim().toLowerCase();
-  if (!message) return res.status(400).json({ error: 'Digite um comando.' });
-  let action = null;
-  if (/\b(parar|pare|stop|fica parado)\b/.test(message)) action = 'stop';
-  else if (/\b(pular|pule|jump)\b/.test(message)) action = 'jump';
-  else if (/\b(atacar|ataque|bater)\b/.test(message)) action = 'attack';
-  else if (/\b(frente|andar|avançar|avancar|andar para frente)\b/.test(message)) action = 'forward';
-  else if (/\b(ré|re|voltar|trás|tras)\b/.test(message)) action = 'back';
-  else if (/\b(esquerda)\b/.test(message)) action = 'left';
-  else if (/\b(direita)\b/.test(message)) action = 'right';
-  else if (/\b(correr|sprint)\b/.test(message)) action = 'sprint';
-  if (!action) return res.json({ ok: true, message: 'Ainda não entendi esse comando. Tente: andar, pular, correr, esquerda, direita, atacar ou parar.' });
-  req.body.action = action;
-  // Execute through the same action logic without repeating HTTP auth.
-  if (action === 'stop') {
-    for (const c of ['forward','back','left','right','jump','sprint','sneak']) bot.setControlState(c, false);
-  } else if (action === 'attack') {
-    const target = bot.nearestEntity(e => e.type === 'player' && e.username !== bot.username && e.position.distanceTo(bot.entity.position) < 4);
-    if (!target) return res.json({ ok: false, message: 'Não há jogador por perto para atacar.' });
-    bot.attack(target);
-  } else {
-    bot.setControlState(action, true);
-    setTimeout(() => {
-      if (bot === activeBot) {
-        try { activeBot.setControlState(action, false); } catch (_) {}
-      }
-    }, 700);
+  const body = req.body && typeof req.body === 'object' ? req.body : {}
+  const message = String(body.message || '').trim().toLocaleLowerCase('pt-BR').slice(0, 200)
+  if (!message) return res.status(400).json({ ok: false, error: 'Digite um comando.' })
+
+  let action = null
+  if (/\b(parar|pare|stop|fica parado)\b/.test(message)) action = 'stop'
+  else if (/\b(pular|pule|jump)\b/.test(message)) action = 'jump'
+  else if (/\b(atacar|ataque|bater)\b/.test(message)) action = 'attack'
+  else if (/\b(frente|andar|avançar|avancar|andar para frente)\b/.test(message)) action = 'forward'
+  else if (/\b(ré|re|voltar|trás|tras)\b/.test(message)) action = 'back'
+  else if (/\b(esquerda)\b/.test(message)) action = 'left'
+  else if (/\b(direita)\b/.test(message)) action = 'right'
+  else if (/\b(correr|sprint)\b/.test(message)) action = 'sprint'
+
+  if (!action) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Ainda não entendi esse comando. Tente: andar, pular, correr, esquerda, direita, atacar ou parar.'
+    })
   }
-  return res.json({ ok: true, message: 'Comando executado: ' + action });
-});
+
+  try {
+    const result = executeAction(action, body)
+    return res.json({ ...result, interpretedAs: action })
+  } catch (error) {
+    const statusCode = error instanceof ValidationError ? error.statusCode : 500
+    const errorMessage = String(error && (error.message || error) || 'Falha ao executar comando').slice(0, 500)
+    if (statusCode >= 500) console.error('[chat:error]', errorMessage)
+    return res.status(statusCode).json({ ok: false, error: errorMessage, interpretedAs: action })
+  }
+})
 
 app.post('/api/disconnect', auth, (_req, res) => {
-  if (bot) { try { bot.quit('Desconectado pelo aplicativo'); } catch (_) {} bot = null; }
-  botInfo.connected = false;
-  botInfo.position = null;
-  res.json({ ok: true, message: 'Bot desconectado.' });
-});
+  disconnectCurrentBot('Desconectado pelo aplicativo')
+  return res.json({ ok: true, message: 'Bot desconectado.', status: getStatus() })
+})
 
-app.listen(PORT, '0.0.0.0', () => console.log('MinecraftBotMobile backend ouvindo na porta ' + PORT));
+app.use((error, _req, res, _next) => {
+  const statusCode = error && error.status === 413 ? 413 : 400
+  return res.status(statusCode).json({
+    ok: false,
+    error: statusCode === 413 ? 'Pedido grande demais (máximo 32 KB).' : 'JSON inválido.'
+  })
+})
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('MinecraftBotMobile backend ouvindo na porta ' + PORT)
+  console.log('Motores disponíveis: ' + Object.keys(engines).join(', '))
+})
