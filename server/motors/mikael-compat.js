@@ -8,10 +8,12 @@ function is26_3 (bot) {
     ? bot.protocolVersion
     : (client && client.protocolVersion)
 
-  // A negotiated protocol number is stronger evidence than the requested version.
-  // Never activate 26.3 wire changes merely because the user selected "26.3".
-  if (protocol !== undefined && protocol !== null && protocol !== '') {
-    return Number(protocol) === 777
+  // A valid negotiated protocol number is stronger evidence than requested version.
+  // Never activate 26.3 wire changes only because the user selected "26.3".
+  const numericProtocol = Number(protocol)
+  if (protocol !== undefined && protocol !== null && protocol !== '' &&
+      Number.isInteger(numericProtocol) && numericProtocol > 0) {
+    return numericProtocol === 777
   }
 
   const versions = [bot && bot.version, client && client.version]
