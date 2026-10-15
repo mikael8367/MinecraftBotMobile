@@ -129,3 +129,41 @@ test('compatibility shim leaves 26.2 packets unchanged', () => {
   client.emit('rel_entity_move', original)
   assert.equal(received, original)
 })
+
+
+test('26.3 inserts a tick_end boundary before every extra movement packet across 50 movements', () => {
+  const { bot, client, writes } = makeBot()
+  installMikaelCompatibility(bot)
+
+  const expected = []
+  for (let i = 0; i < 50; i++) {
+    const packetName = i % 2 === 0 ? 'position' : 'position_look'
+    client.write(packetName, { x: i + 0.5, y: 64, z: i + 0.5 })
+    if (i > 0) expected.push('tick_end')
+    expected.push(packetName)
+  }
+
+  assert.deepEqual(writes.map(packet => packet.name), expected)
+  assert.equal(writes.filter(packet => packet.name === 'tick_end').length, 49)
+})
+
+test('native 26.3 tick_end prevents a duplicate fallback packet', () => {
+  const { bot, client, writes } = makeBot()
+  installMikaelCompatibility(bot)
+
+  client.write('position', { x: 1, y: 64, z: 1 })
+  client.write('tick_end', {})
+  client.write('position_look', { x: 2, y: 64, z: 2 })
+
+  assert.deepEqual(writes.map(packet => packet.name), ['position', 'tick_end', 'position_look'])
+})
+
+test('movement tick_end fallback does not change pre-26.3 movement packets', () => {
+  const { bot, client, writes } = makeBot('26.2', 776)
+  installMikaelCompatibility(bot)
+
+  client.write('position', { x: 1, y: 64, z: 1 })
+  client.write('position_look', { x: 2, y: 64, z: 2 })
+
+  assert.deepEqual(writes.map(packet => packet.name), ['position', 'position_look'])
+})
