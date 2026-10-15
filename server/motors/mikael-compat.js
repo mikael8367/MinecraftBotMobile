@@ -1,24 +1,31 @@
 'use strict'
 
-// Compatibility shims for the current @wp2508/mineflayer package used by this app.
-// Keep these narrowly gated to Java 26.3 (protocol 777); do not change packet
-// handling for older versions or for 26.1/26.2.
-function is26_3 (bot, requestedVersion) {
-  if (String(requestedVersion || '') === '26.3') return true
+// Compatibility shims for the @wp2508/mineflayer package pinned by this app.
+// Only patch packets after the negotiated protocol/version identifies Java 26.3.
+function is26_3 (bot) {
   const client = bot && bot._client
-  const candidates = [
-    bot && bot.version,
-    client && client.version
-  ]
-  if (candidates.some(version => String(version || '') === '26.3')) return true
-  return Number((bot && bot.protocolVersion) ?? (client && client.protocolVersion)) === 777
+  const protocol = (bot && bot.protocolVersion != null)
+    ? bot.protocolVersion
+    : (client && client.protocolVersion)
+
+  // A negotiated protocol number is stronger evidence than the requested version.
+  // Never activate 26.3 wire changes merely because the user selected "26.3".
+  if (protocol !== undefined && protocol !== null && protocol !== '') {
+    return Number(protocol) === 777
+  }
+
+  const versions = [bot && bot.version, client && client.version]
+    .filter(version => version !== undefined && version !== null && version !== false && String(version) !== '')
+    .map(String)
+
+  return versions.length > 0 && versions.every(version => version === '26.3')
 }
 
 function finite (value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback
 }
 
-function installMikaelCompatibility (bot, requestedVersion) {
+function installMikaelCompatibility (bot) {
   const client = bot && bot._client
   if (!client || typeof client.emit !== 'function' || typeof client.write !== 'function') {
     return { installed: false, reason: 'Mineflayer client does not expose emit/write' }
@@ -31,12 +38,12 @@ function installMikaelCompatibility (bot, requestedVersion) {
   const originalWrite = client.write
 
   // In 26.3 the enum inserted CHANGE_DESTROY_DIRECTION at id 1.
-  // The installed fork still writes legacy numeric block_dig statuses, so every
-  // old action ID > 0 must move up by one: abort 1→2, finish 2→3, release 5→6.
+  // Every legacy action ID > 0 shifts up by one (abort 1→2, finish 2→3,
+  // release-use-item 5→6, swap-hand 6→7).
   client.write = function (packetName, params, ...rest) {
     if (
       packetName === 'block_dig' &&
-      is26_3(bot, requestedVersion) &&
+      is26_3(bot) &&
       params &&
       Number.isInteger(params.status) &&
       params.status >= 1 &&
@@ -47,11 +54,11 @@ function installMikaelCompatibility (bot, requestedVersion) {
     return originalWrite.call(this, packetName, params, ...rest)
   }
 
-  // The 26.3 wire schema uses chained relative movement steps and new absolute
-  // position-path shapes. Existing fork listeners still expect the pre-26.3
-  // flat fields. Normalize the packet just before the client's listeners run.
+  // Convert the 26.3 packet shapes to the flat fields expected by the fork's
+  // current entity listeners. Only the final absolute position is needed for
+  // Mineflayer's current non-interpolating entity model.
   client.emit = function (eventName, ...args) {
-    if (is26_3(bot, requestedVersion) && args[0] && typeof args[0] === 'object') {
+    if (is26_3(bot) && args[0] && typeof args[0] === 'object') {
       const packet = args[0]
 
       if (
@@ -67,27 +74,38 @@ function installMikaelCompatibility (bot, requestedVersion) {
         args[0] = { ...packet, ...totals }
       } else if (eventName === 'sync_entity_position' && packet.positionType) {
         const entity = bot.entities && bot.entities[packet.entityId]
+        const position = entity && entity.position
         const velocity = entity && entity.velocity
         const preservedVelocity = {
           dx: finite(velocity && velocity.x),
           dy: finite(velocity && velocity.y),
           dz: finite(velocity && velocity.z)
         }
+        const fallbackPosition = {
+          x: finite(packet.x, finite(position && position.x)),
+          y: finite(packet.y, finite(position && position.y)),
+          z: finite(packet.z, finite(position && position.z))
+        }
 
-        if (packet.positionType === 'stepped' && Array.isArray(packet.steps) && packet.steps.length > 0) {
-          // Each step is an absolute position; the last is the final server position.
-          const finalStep = packet.steps[packet.steps.length - 1]
+        if (packet.positionType === 'stepped') {
+          // Some edge cases may carry an empty/malformed path. Keep the last known
+          // coordinates rather than feeding undefined values to Vec3.set().
+          const steps = Array.isArray(packet.steps) ? packet.steps : []
+          const finalStep = steps.length > 0 ? steps[steps.length - 1] : null
           args[0] = {
             ...packet,
-            x: finite(finalStep.x, packet.x),
-            y: finite(finalStep.y, packet.y),
-            z: finite(finalStep.z, packet.z),
+            x: finite(finalStep && finalStep.x, fallbackPosition.x),
+            y: finite(finalStep && finalStep.y, fallbackPosition.y),
+            z: finite(finalStep && finalStep.z, fallbackPosition.z),
             ...preservedVelocity
           }
         } else if (packet.positionType === 'linear') {
-          // 26.3 linear paths omit velocity. Preserve the prior entity velocity rather
-          // than allowing the old listener to overwrite it with undefined values.
-          args[0] = { ...packet, ...preservedVelocity }
+          // 26.3 linear paths omit velocity; preserve the previous velocity.
+          args[0] = {
+            ...packet,
+            ...fallbackPosition,
+            ...preservedVelocity
+          }
         }
       }
     }
@@ -99,7 +117,7 @@ function installMikaelCompatibility (bot, requestedVersion) {
     id: 'mikael-26.3-compat',
     applied: true,
     patches: [...patches],
-    scope: 'Only active after this client resolves to Minecraft 26.3 / protocol 777'
+    scope: 'Only active after the negotiated client resolves to Minecraft 26.3 / protocol 777'
   }
   return { installed: true, patches: [...patches] }
 }
