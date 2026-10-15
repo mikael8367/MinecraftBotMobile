@@ -612,13 +612,13 @@ class MainActivity : Activity() {
         val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
         val engine = Spinner(this).apply { styleBotSpinner(this) }
         val authMode = Spinner(this).apply { styleBotSpinner(this) }
-        authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
+        authMode.adapter = styledSpinnerAdapter(listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
         val accountId = EditText(this).apply {
             setSingleLine(true)
             hint = "E-mail ou identificador da conta Microsoft"
             styleBotInput(this)
         }
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
+        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael","Mineflayer"))
         configureVersionSpinner(mcVersion, "mikael", "26.3")
         watchEngineSelection(engine, mcVersion)
 
