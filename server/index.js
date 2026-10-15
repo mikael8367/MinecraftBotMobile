@@ -164,7 +164,8 @@ function disconnectCurrentBot (reason = 'Desconectado pelo aplicativo') {
     health: null,
     food: null,
     position: null,
-    lastError: null
+    lastError: null,
+    errorDetails: null
   })
 }
 
@@ -382,7 +383,8 @@ app.post('/api/connect', auth, (req, res) => {
     health: null,
     food: null,
     position: null,
-    lastError: null
+    lastError: null,
+    errorDetails: null
   })
 
   let activeBot = null
