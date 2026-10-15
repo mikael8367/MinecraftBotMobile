@@ -241,10 +241,10 @@ app.post('/api/server-check', auth, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {}
   const host = String(body.host ?? '').trim()
   const rawPort = body.port === undefined || body.port === null || body.port === '' ? '25565' : String(body.port)
-  if (!host || host.length > 253 || /[\\s/?#\\\\\\u0000-\\u001f]/.test(host) || host.includes('://')) {
+  if (!host || host.length > 253 || /[\s/?#\\\u0000-\u001f]/.test(host) || host.includes('://')) {
     return res.status(400).json({ ok: false, result: 'invalid', message: 'Informe um IP ou domínio válido, sem http:// ou https://.' })
   }
-  if (!/^\\d{1,5}$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
+  if (!/^\d{1,5}$/.test(rawPort) || Number(rawPort) < 1 || Number(rawPort) > 65535) {
     return res.status(400).json({ ok: false, result: 'invalid', message: 'A porta deve estar entre 1 e 65535.' })
   }
   const port = Number(rawPort)
