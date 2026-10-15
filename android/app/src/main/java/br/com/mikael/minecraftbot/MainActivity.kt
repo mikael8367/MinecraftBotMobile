@@ -144,7 +144,7 @@ class MainActivity : Activity() {
         }
         val monitoringLabels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         monitoringLabels.addView(text("Monitoramento em primeiro plano", 13, white, true))
-        monitoringLabels.addView(text("Notificação persistente com o bot ON/OFF, mesmo ao fechar a tela.", 10, muted, false).apply {
+        monitoringLabels.addView(text("Mantém a notificação ON/OFF ao fechar o app. O bot roda no backend; quedas do servidor ainda podem desconectar.", 10, muted, false).apply {
             setPadding(0, dp(3), dp(8), 0)
         })
         monitoringRow.addView(monitoringLabels, LinearLayout.LayoutParams(0, -2, 1f))
