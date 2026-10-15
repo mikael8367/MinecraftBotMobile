@@ -1149,17 +1149,34 @@ class MainActivity : Activity() {
                         else -> "● Resposta recebida"
                     }
 
-                    if (!quiet) appendLog("HTTP $code $path\n$response")
-                    if (serverError.isNotBlank() && (!quiet || serverError != lastPolledError)) appendLog("ERRO: $serverError")
+                    if (!quiet) {
+                        appendLog("HTTP $code $path")
+                        if (response.isNotBlank()) appendLog("Resposta da API: $response")
+                    }
+                    if (path == "/api/connect" && code in 200..299) {
+                        val host = state.optString("host", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val port = state.optString("port", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val username = state.optString("username", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val version = state.optString("version", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val engineId = state.optString("engine", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val authMode = state.optString("auth", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        appendLog("DIAGNÓSTICO DA TENTATIVA: destino=${host.ifBlank { "?" }}:${port.ifBlank { "?" }} • nome=${username.ifBlank { "?" }} • versão=${version.ifBlank { "auto" }} • motor=${engineId.ifBlank { "?" }} • autenticação=${authMode.ifBlank { "?" }}")
+                    }
+                    if (serverError.isNotBlank() && (!quiet || serverError != lastPolledError)) {
+                        appendLog("ERRO DO BACKEND [$connectionState]: $serverError")
+                    }
                     if (quiet && (connectionState != lastPolledState || serverError != lastPolledError)) {
-                        val serverVersion = state.optString("serverVersion", "")
-                        val engineId = state.optString("engine", "")
+                        val serverVersion = state.optString("serverVersion", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val engineId = state.optString("engine", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                         val pathfindingAvailable = state.optBoolean("pathfindingAvailable", false)
-                        appendLog("Estado do bot: $connectionState" +
-                            (if (serverVersion.isNotBlank()) " • Minecraft $serverVersion" else "") +
-                            (if (engineId.isNotBlank()) " • Motor $engineId" else "") +
-                            (if (connectionState == "connected") " • Seguir: " + if (pathfindingAvailable) "disponível" else "desativado" else "") +
-                            (if (serverError.isNotBlank()) " — $serverError" else ""))
+                        val host = state.optString("host", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        val port = state.optString("port", "").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                        appendLog("ESTADO: $connectionState" +
+                            (if (host.isNotBlank()) " • destino $host${if (port.isNotBlank()) ":$port" else ""}" else "") +
+                            (if (serverVersion.isNotBlank()) " • Minecraft $serverVersion" else " • versão negociada ainda não confirmada") +
+                            (if (engineId.isNotBlank()) " • motor $engineId" else "") +
+                            (if (connectionState == "connected") " • seguir: " + if (pathfindingAvailable) "disponível" else "desativado" else "") +
+                            (if (serverError.isNotBlank()) " • detalhe: $serverError" else ""))
                     }
                     if (quiet) {
                         lastPolledState = connectionState
