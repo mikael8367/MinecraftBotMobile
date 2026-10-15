@@ -152,6 +152,39 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun loadEngineCapabilities() {
+        thread {
+            var connection: HttpURLConnection? = null
+            try {
+                val base = BuildConfig.API_BASE_URL.trimEnd('/')
+                connection = (URL("$base/api/capabilities").openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    requestMethod = "GET"
+                }
+                if (connection.responseCode !in 200..299) return@thread
+                val data = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                val engines = data.optJSONObject("engines") ?: return@thread
+                val official = engines.optJSONObject("official")?.optJSONArray("testedVersions") ?: return@thread
+                val mikael = engines.optJSONObject("mikael")?.optJSONArray("testedVersions") ?: return@thread
+                val officialList = mutableListOf<String>()
+                val mikaelList = mutableListOf<String>()
+                for (i in 0 until official.length()) officialList.add(official.optString(i))
+                for (i in 0 until mikael.length()) mikaelList.add(mikael.optString(i))
+                if (officialList.isEmpty() || mikaelList.isEmpty()) return@thread
+                runOnUiThread {
+                    officialTestedVersions = officialList
+                    mikaelTestedVersions = mikaelList
+                    appendLog("Lista de versões sincronizada com o backend.")
+                }
+            } catch (_: Exception) {
+                // Keep the built-in list so the app remains usable if capabilities is offline.
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
     private fun savedBots(): org.json.JSONArray {
         val raw = getSharedPreferences("minecraftbot", MODE_PRIVATE).getString("saved_bots", "[]") ?: "[]"
         return try { org.json.JSONArray(raw) } catch (_: Exception) { org.json.JSONArray() }
@@ -178,7 +211,7 @@ class MainActivity : Activity() {
                 setOnClickListener { showBotSettingsDialog(i, item) }
             }
             card.addView(botTitle)
-            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer normal" else "Mineflayer Mikael experimental") + "\\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
+            card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto") + "  •  " + (if (item.optString("engine","mikael") == "official") "Mineflayer oficial" else "Mikael experimental") + "\nToque no nome para abrir as configurações",11,muted,false).apply { setPadding(0,4,0,8) })
             card.setOnClickListener { showBotSettingsDialog(i, item) }
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
             val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
