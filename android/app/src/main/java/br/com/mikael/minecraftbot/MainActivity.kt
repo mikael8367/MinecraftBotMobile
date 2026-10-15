@@ -68,6 +68,7 @@ class MainActivity : Activity() {
     private var lastPolledState = ""
     private var lastPolledError = ""
     private var currentBotConnected = false
+    private var currentConnectionState = "disconnected"
     private val statusPoller = object : Runnable {
         override fun run() {
             if (!pollingStatus) return
@@ -427,6 +428,10 @@ class MainActivity : Activity() {
                 background=rounded(if (currentBotConnected) Color.rgb(31,65,43) else green,9)
             }
             use.setOnClickListener {
+                if (currentConnectionState == "connecting" || currentConnectionState == "connected") {
+                    appendLog("Já existe uma tentativa de conexão em andamento ou o bot já está conectado. Aguarde o estado atual antes de tentar novamente.")
+                    return@setOnClickListener
+                }
                 val wanted = item.optString("version","auto")
                 // Preserve the engine saved for this bot; do not silently replace it.
                 val engineId = item.optString("engine", "mikael")
@@ -1174,7 +1179,10 @@ class MainActivity : Activity() {
                     val serverError = apiError.ifBlank { stateError }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
                     val nowConnected = connected && connectionState == "connected"
-                    if (currentBotConnected != nowConnected) {
+                    val previousConnectionState = currentConnectionState
+                    if (path == "/api/status" || path == "/api/connect") currentConnectionState = connectionState
+                    if (path == "/api/disconnect" && code in 200..299) currentConnectionState = "disconnected"
+                    if (currentBotConnected != nowConnected || previousConnectionState != currentConnectionState) {
                         currentBotConnected = nowConnected
                         refreshBotList()
                     }
