@@ -44,12 +44,36 @@ app.post('/api/connect', auth, (req, res) => {
   if (bot) { try { bot.quit('Nova conexão solicitada'); } catch (_) {} bot = null; }
   botInfo = { connected: false, username, host, port, version: requestedVersion, health: null, food: null, position: null, lastError: null };
   try {
-    bot = mineflayer.createBot({ host, port, username, version: requestedVersion === 'auto' ? false : requestedVersion, auth: 'offline', hideErrors: false });
-    bot.loadPlugin(pathfinder);
-    bot.once('spawn', () => { botInfo.connected = true; botInfo.lastError = null; });
-    bot.on('end', () => { botInfo.connected = false; });
-    bot.on('kicked', (reason) => { botInfo.connected = false; botInfo.lastError = 'Conexão recusada: ' + String(reason).slice(0, 300); });
-    bot.on('error', (err) => { botInfo.lastError = String(err.message || err).slice(0, 300); });
+    const activeBot = mineflayer.createBot({ host, port, username, version: requestedVersion === 'auto' ? false : requestedVersion, auth: 'offline', hideErrors: false });
+    bot = activeBot;
+    activeBot.loadPlugin(pathfinder);
+    activeBot.once('spawn', () => {
+      if (bot !== activeBot) return;
+      botInfo.connected = true;
+      botInfo.lastError = null;
+    });
+    activeBot.on('end', () => {
+      if (bot !== activeBot) return;
+      botInfo.connected = false;
+      botInfo.position = null;
+    });
+    activeBot.on('kicked', (reason) => {
+      if (bot !== activeBot) return;
+      botInfo.connected = false;
+      botInfo.lastError = 'Conexão recusada: ' + String(reason).slice(0, 300);
+    });
+    activeBot.on('error', (err) => {
+      if (bot !== activeBot) return;
+      botInfo.lastError = String(err.message || err).slice(0, 300);
+    });
+    const connectionTimer = setTimeout(() => {
+      if (bot === activeBot && !activeBot.entity) {
+        botInfo.lastError = 'Tempo limite de conexão excedido. Confira o endereço, a porta, a versão e se o servidor Aternos está ligado.';
+        try { activeBot.quit('Tempo limite de conexão'); } catch (_) {}
+      }
+    }, 25000);
+    activeBot.once('spawn', () => clearTimeout(connectionTimer));
+    activeBot.once('end', () => clearTimeout(connectionTimer));
     return res.json({ ok: true, message: 'Tentativa de conexão iniciada. Consulte /api/status.', status: status() });
   } catch (err) {
     botInfo.lastError = String(err.message || err);
@@ -59,12 +83,17 @@ app.post('/api/connect', auth, (req, res) => {
 
 app.post('/api/action', auth, (req, res) => {
   if (!bot || !bot.entity) return res.status(409).json({ error: 'O bot ainda não está conectado.' });
+  const activeBot = bot;
   const action = String(req.body.action || '');
   const controls = ['forward', 'back', 'left', 'right', 'jump', 'sprint'];
   if (controls.includes(action)) {
-    bot.setControlState(action, true);
+    activeBot.setControlState(action, true);
     const stopAfter = action === 'sprint' ? 1200 : 700;
-    setTimeout(() => { if (bot) { try { bot.setControlState(action, false); } catch (_) {} } }, stopAfter);
+    setTimeout(() => {
+      if (bot === activeBot) {
+        try { activeBot.setControlState(action, false); } catch (_) {}
+      }
+    }, stopAfter);
     return res.json({ ok: true, message: 'Ação executada: ' + action });
   }
   if (action === 'stop') {
@@ -89,6 +118,7 @@ app.post('/api/action', auth, (req, res) => {
 
 app.post('/api/chat', auth, (req, res) => {
   if (!bot || !bot.entity) return res.status(409).json({ error: 'Conecte o bot a um servidor primeiro.' });
+  const activeBot = bot;
   const message = String(req.body.message || '').trim().toLowerCase();
   if (!message) return res.status(400).json({ error: 'Digite um comando.' });
   let action = null;
@@ -111,7 +141,11 @@ app.post('/api/chat', auth, (req, res) => {
     bot.attack(target);
   } else {
     bot.setControlState(action, true);
-    setTimeout(() => { if (bot) { try { bot.setControlState(action, false); } catch (_) {} } }, 700);
+    setTimeout(() => {
+      if (bot === activeBot) {
+        try { activeBot.setControlState(action, false); } catch (_) {}
+      }
+    }, 700);
   }
   return res.json({ ok: true, message: 'Comando executado: ' + action });
 });
