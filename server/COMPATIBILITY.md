@@ -2,7 +2,8 @@
 
 ## O que foi conferido
 - Seleção de motor e versão no app e no backend.
-- Validação de endereço, porta, usuário offline e versão.
+- Validação de endereço, porta, usuário, modo de autenticação e versão.
+- Fluxo de autenticação Microsoft por código de dispositivo, sem capturar senha no app.
 - Ciclo de vida de conexão (spawn, erro, kick, timeout, disconnect).
 - Cancelamento de temporizadores e dos controles de movimento.
 - Comandos em português: acentos, negações e frases que citavam palavras-chave sem dar uma ordem.
@@ -29,7 +30,8 @@ A página upstream de Mineflayer declara versões até 26.1; o fork `@wp2508/min
 7. **Kick do servidor:** o backend limpa os temporizadores e o estado disponível do pathfinder quando o bot é expulso.
 
 ## Limites atuais
-- Login configurado como `auth: 'offline'`; não autentica contas Microsoft e depende de o servidor aceitar entrada offline.
+- O modo `offline` só funciona quando o servidor aceita jogadores sem autenticação oficial. O modo `microsoft` usa o fluxo oficial por código de dispositivo e exige uma conta com Minecraft Java; não transforma uma conta offline em conta licenciada.
+- A suíte de regressão não prova entrada no mundo. O script `server/smoke/live-connect-smoke.js` exige um backend em `127.0.0.1:10000` e um servidor Java 26.3 acessível em `127.0.0.1:25565`; ele verifica spawn, coordenadas, movimento e desconexão. Esse teste de servidor real ainda não foi executado nesta auditoria.
 - A compatibilidade de `mineflayer-pathfinder` com protocolos a partir de 775 não foi validada; por isso o pathfinder fica desativado nesse intervalo.
 - Os testes do projeto são testes de lógica e metadados; não substituem testes de integração contra servidores reais em cada versão.
 - Use HTTPS e um `API_TOKEN` forte no Render. Não compartilhe o token em código, logs ou capturas de tela.
