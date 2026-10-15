@@ -9,31 +9,40 @@ test('normalizes accents and case without changing command meaning', () => {
   assert.equal(parseCommand('avançar'), 'forward')
   assert.equal(parseCommand('vá para trás'), 'back')
   assert.equal(parseCommand('ficar parado'), 'stop')
-}) 
+})
 
-test('recognizes all documented commands', () => {
+test('recognizes documented and common direct commands', () => {
   const examples = {
     'parar': 'stop',
     'FICA PARADO': 'stop',
     'ficar parado': 'stop',
+    'para de andar agora': 'stop',
     'pule': 'jump',
     'ataque': 'attack',
+    'ataque nele': 'attack',
     'andar para frente': 'forward',
+    'ande para frente': 'forward',
     'voltar': 'back',
     'esquerda': 'left',
+    'vire à esquerda': 'left',
     'direita': 'right',
-    'correr': 'sprint'
+    'correr': 'sprint',
+    'bot, avance': 'forward',
+    'MikaelBot: pare': 'stop'
   }
   for (const [input, expected] of Object.entries(examples)) {
     assert.equal(parseCommand(input), expected, input)
   }
 })
 
-test('does not execute unknown, empty, or negated phrases', () => {
-  for (const phrase of ['', 'faz uma casa', 'não atacar', 'não pare', 'nunca pule', 'evite correr']) {
+test('does not execute unknown, empty, negated, or incidental keyword phrases', () => {
+  for (const phrase of [
+    '', 'faz uma casa', 'não atacar', 'não pare', 'nunca pule', 'evite correr',
+    'o caminho fica na minha frente', 'o jogador está à direita',
+    'vou atacar depois', 'ele começou a pular', 're'
+  ]) {
     assert.equal(parseCommand(phrase), null, phrase)
   }
-  assert.equal(parseCommand('re'), null)
 })
 
 test('caps command processing input to 200 characters', () => {
