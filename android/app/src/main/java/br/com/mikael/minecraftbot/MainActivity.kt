@@ -367,7 +367,7 @@ class MainActivity : Activity() {
             hint = "E-mail ou identificador da conta Microsoft"
             setText(item.optString("accountId",""))
         }
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
         val selectedEngine = item.optString("engine","mikael")
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
         configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
@@ -425,7 +425,7 @@ class MainActivity : Activity() {
             setSingleLine(true)
             hint = "E-mail ou identificador da conta Microsoft"
         }
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
+        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
         configureVersionSpinner(mcVersion, "mikael", "26.3")
         watchEngineSelection(engine, mcVersion)
 
