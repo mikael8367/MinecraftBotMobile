@@ -82,11 +82,11 @@ class BotMonitoringService : Service() {
                     return@thread
                 }
 
-                connection = (URL("${'$'}baseUrl/api/status").openConnection() as HttpURLConnection).apply {
+                connection = (URL("$baseUrl/api/status").openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 7000
                     readTimeout = 7000
-                    setRequestProperty("Authorization", "Bearer ${'$'}token")
+                    setRequestProperty("Authorization", "Bearer $token")
                     setRequestProperty("Accept", "application/json")
                 }
                 val code = connection.responseCode
@@ -97,7 +97,7 @@ class BotMonitoringService : Service() {
                     return@thread
                 }
                 if (code !in 200..299) {
-                    setNotificationState("Monitoramento ativo", "Backend indisponível (HTTP ${'$'}code). Tentando novamente.")
+                    setNotificationState("Monitoramento ativo", "Backend indisponível (HTTP $code). Tentando novamente.")
                     return@thread
                 }
 
@@ -113,21 +113,21 @@ class BotMonitoringService : Service() {
                 val error = info.optString("lastError", "").trim()
 
                 if (connected) {
-                    val server = if (host.isNotBlank()) "${'$'}host:${'$'}port" else "servidor conectado"
+                    val server = if (host.isNotBlank()) "$host:$port" else "servidor conectado"
                     val detail = buildString {
-                        append("${'$'}username • ${'$'}server")
-                        if (version.isNotBlank()) append(" • Minecraft ${'$'}version")
-                        if (engine.isNotBlank()) append(" • ${'$'}engine")
+                        append("$username • $server")
+                        if (version.isNotBlank()) append(" • Minecraft $version")
+                        if (engine.isNotBlank()) append(" • $engine")
                     }
                     setNotificationState("1 bot ON", detail)
                 } else {
                     val detail = when (state) {
-                        "connecting" -> "Conectando ${'$'}username..."
-                        "kicked" -> "${'$'}username foi expulso pelo servidor."
-                        "timeout" -> "Tempo limite ao conectar ${'$'}username."
-                        "error" -> "Falha no bot ${'$'}username."
+                        "connecting" -> "Conectando $username..."
+                        "kicked" -> "$username foi expulso pelo servidor."
+                        "timeout" -> "Tempo limite ao conectar $username."
+                        "error" -> "Falha no bot $username."
                         else -> "Nenhum bot conectado no momento."
-                    } + if (error.isNotBlank()) " ${'$'}error" else ""
+                    } + if (error.isNotBlank()) " $error" else ""
                     setNotificationState("Bot OFF • monitoramento ativo", detail.take(MAX_NOTIFICATION_TEXT))
                 }
             } catch (_: Exception) {
