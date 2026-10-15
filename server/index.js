@@ -272,13 +272,16 @@ app.post('/api/connect', auth, (req, res) => {
       if (bot !== activeBot) return
       clearConnectionTimer()
       const detail = reasonText(reason)
+      stopMovement(activeBot)
       updateBotInfo({
         connected: false,
         connectionState: 'kicked',
+        pathfindingAvailable: false,
+        health: null,
+        food: null,
         position: null,
         lastError: 'O servidor recusou a entrada: ' + (detail || 'motivo não informado')
       })
-      clearControlTimers()
     })
 
     activeBot.on('error', (error) => {
