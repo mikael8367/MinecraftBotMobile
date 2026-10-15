@@ -18,6 +18,11 @@ const rawConnectTimeout = Number(process.env.CONNECT_TIMEOUT_MS || 30000)
 const CONNECT_TIMEOUT_MS = Number.isFinite(rawConnectTimeout)
   ? Math.max(10000, Math.min(rawConnectTimeout, 90000))
   : 30000
+// Device-code login requires time for the user to switch to Microsoft and approve.
+const rawMicrosoftConnectTimeout = Number(process.env.MICROSOFT_CONNECT_TIMEOUT_MS || 600000)
+const MICROSOFT_CONNECT_TIMEOUT_MS = Number.isFinite(rawMicrosoftConnectTimeout)
+  ? Math.max(60000, Math.min(rawMicrosoftConnectTimeout, 900000))
+  : 600000
 let bot = null
 let connectionTimer = null
 const controlTimers = new Map()
@@ -31,6 +36,8 @@ let botInfo = {
   version: null,
   serverVersion: null,
   engine: null,
+  auth: null,
+  authCode: null,
   pathfindingAvailable: false,
   health: null,
   food: null,
@@ -60,6 +67,32 @@ function reasonText (reason) {
   if (reason == null) return ''
   if (typeof reason === 'string') return reason.slice(0, 500)
   try { return JSON.stringify(reason).slice(0, 500) } catch (_) { return String(reason).slice(0, 500) }
+}
+
+function microsoftCodeInfo (data) {
+  const userCode = String((data && (data.user_code || data.userCode)) || '').trim().slice(0, 32)
+  if (!userCode) return null
+
+  const fallbackUri = 'https://microsoft.com/devicelogin'
+  let verificationUri = fallbackUri
+  const suppliedUri = String((data && (data.verification_uri || data.verificationUri)) || fallbackUri)
+  try {
+    const parsed = new URL(suppliedUri)
+    const hostname = parsed.hostname.toLowerCase()
+    const microsoftHost = hostname === 'microsoft.com' ||
+      hostname.endsWith('.microsoft.com') ||
+      hostname === 'microsoftonline.com' ||
+      hostname.endsWith('.microsoftonline.com')
+    if (parsed.protocol === 'https:' && microsoftHost) verificationUri = parsed.toString()
+  } catch (_) {}
+
+  const expiresIn = Number(data && (data.expires_in || data.expiresIn))
+  return {
+    userCode,
+    verificationUri,
+    expiresIn: Number.isFinite(expiresIn) ? Math.max(0, Math.min(expiresIn, 3600)) : null,
+    createdAt: new Date().toISOString()
+  }
 }
 
 function clearConnectionTimer () {
@@ -95,6 +128,7 @@ function disconnectCurrentBot (reason = 'Desconectado pelo aplicativo') {
     connected: false,
     connectionState: 'disconnected',
     serverVersion: null,
+    authCode: null,
     pathfindingAvailable: false,
     health: null,
     food: null,
@@ -223,6 +257,8 @@ app.post('/api/connect', auth, (req, res) => {
     version: options.version,
     serverVersion: null,
     engine: options.engine,
+    auth: options.auth,
+    authCode: null,
     pathfindingAvailable: false,
     health: null,
     food: null,
@@ -235,9 +271,23 @@ app.post('/api/connect', auth, (req, res) => {
     activeBot = engine.createBot({
       host: options.host,
       port: options.port,
-      username: options.username,
+      username: options.auth === 'microsoft' ? options.accountId : options.username,
       version: options.version === 'auto' ? false : options.version,
-      auth: 'offline',
+      auth: options.auth,
+      onMsaCode: options.auth === 'microsoft' ? (data) => {
+        if (bot && bot !== activeBot) return
+        const authCode = microsoftCodeInfo(data)
+        if (!authCode) {
+          console.warn('[auth:microsoft] device-code callback did not include a user code')
+          return
+        }
+        updateBotInfo({
+          connectionState: 'authenticating',
+          authCode,
+          lastError: null
+        })
+        console.log('[auth:microsoft] Device authorization required; code is available through authenticated /api/status.')
+      } : undefined,
       hideErrors: false,
       logErrors: false
     })
@@ -266,7 +316,9 @@ app.post('/api/connect', auth, (req, res) => {
       updateBotInfo({
         connected: true,
         connectionState: 'connected',
+        username: activeBot.username || options.username,
         serverVersion: detectedVersion || null,
+        authCode: null,
         pathfindingAvailable: canPathfind,
         lastError: null
       })
@@ -280,6 +332,7 @@ app.post('/api/connect', auth, (req, res) => {
       updateBotInfo({
         connected: false,
         connectionState: 'kicked',
+        authCode: null,
         pathfindingAvailable: false,
         health: null,
         food: null,
@@ -318,6 +371,7 @@ app.post('/api/connect', auth, (req, res) => {
       updateBotInfo({
         connected: false,
         connectionState: nextState,
+        authCode: null,
         position: null,
         pathfindingAvailable: false,
         lastError: botInfo.lastError || (detail && detail !== 'socketClosed' ? 'Conexão encerrada: ' + detail : null)
@@ -329,10 +383,11 @@ app.post('/api/connect', auth, (req, res) => {
       updateBotInfo({
         connected: false,
         connectionState: 'timeout',
-        lastError: 'Tempo limite de conexão excedido. Confira o IP, a porta, a versão e se o servidor está ligado.'
+        authCode: null,
+        lastError: 'Tempo limite de conexão excedido. Confira o IP, a porta, a versão e, no modo Microsoft, conclua a autorização antes do prazo.'
       })
       try { activeBot.quit('Tempo limite de conexão') } catch (_) {}
-    }, CONNECT_TIMEOUT_MS)
+    }, options.auth === 'microsoft' ? MICROSOFT_CONNECT_TIMEOUT_MS : CONNECT_TIMEOUT_MS)
     if (typeof connectionTimer.unref === 'function') connectionTimer.unref()
 
     return res.status(202).json({
