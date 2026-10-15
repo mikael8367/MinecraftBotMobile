@@ -25,7 +25,7 @@ function parseCommand (input) {
     [/^(?:parar|pare|stop|fica(?:r)? parado|fique parado|para de andar)(?: agora)?$/, 'stop'],
     [/^(?:pular|pule|pula|jump)(?: agora)?$/, 'jump'],
     [/^(?:atacar|ataque|bater)(?: agora| nele| no jogador)?$/, 'attack'],
-    [/^(?:frente|andar|ande|avancar|avanca|andar para frente|ande para frente|va para frente|vai para frente|siga em frente|segue em frente)$/, 'forward'],
+    [/^(?:frente|andar|ande|avancar|avanca|avance|andar para frente|ande para frente|va para frente|vai para frente|siga em frente|segue em frente)$/, 'forward'],
     [/^(?:voltar|volte|tras|va para tras|vai para tras|ande para tras|andar para tras|recue)$/, 'back'],
     [/^(?:esquerda|va para esquerda|vai para esquerda|ande para esquerda|vire a esquerda|vira a esquerda)$/, 'left'],
     [/^(?:direita|va para direita|vai para direita|ande para direita|vire a direita|vira a direita)$/, 'right'],
