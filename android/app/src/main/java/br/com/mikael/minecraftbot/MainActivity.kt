@@ -504,8 +504,20 @@ class MainActivity : Activity() {
             val v = mcVersion.selectedItem?.toString() ?: "auto"
             val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
             val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+            val accountValue = accountId.text.toString().trim()
+            if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
+                Toast.makeText(this, "Informe um identificador Microsoft válido, sem espaços.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            val saved = savedBots()
+            if (index in 0 until saved.length()) {
+                saved.put(index, JSONObject().put("name", name).put("host", host).put("port", port)
+                    .put("skinName", skinName.text.toString().trim()).put("version", v).put("engine", engineId)
+                    .put("auth", authValue).put("accountId", accountValue))
+                saveBots(saved)
+            }
             request("POST", "/api/connect", JSONObject().put("host", host).put("port", port).put("username", name)
-                .put("accountId", accountId.text.toString().trim()).put("auth", authValue).put("version", v).put("engine", engineId))
+                .put("accountId", accountValue).put("auth", authValue).put("version", v).put("engine", engineId))
             Toast.makeText(this, "Pedido para iniciar enviado.", Toast.LENGTH_SHORT).show()
         }
         val stopBot = Button(this).apply { text = "■ DESLIGAR"; isAllCaps = false; textSize = 11f; setTextColor(white); background = rounded(Color.rgb(111, 48, 48), 10) }
