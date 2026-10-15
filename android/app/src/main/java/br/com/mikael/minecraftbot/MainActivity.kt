@@ -416,83 +416,201 @@ class MainActivity : Activity() {
     }
 
     private fun showBotSettingsDialog(index: Int, item: JSONObject) {
-        val form = LinearLayout(this).apply {
+        val dialog = android.app.Dialog(this)
+        val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(14), dp(20), dp(14))
-            setBackgroundColor(bg)
+            background = rounded(Color.rgb(7, 17, 12), 22)
+            setPadding(dp(14), dp(12), dp(14), dp(14))
         }
-        form.addView(text("AJUSTE SEU BOT", 11, green, true).apply { setPadding(0, 0, 0, dp(4)) })
-        form.addView(text("Edite os dados do servidor e o modo de conexão.", 12, muted, false).apply { setPadding(0, 0, 0, dp(14)) })
-        val botName = EditText(this).apply { setSingleLine(true); hint="Nome do bot"; setText(item.optString("name")); styleBotInput(this) }
-        val serverIp = EditText(this).apply { setSingleLine(true); hint="IP ou domínio"; setText(item.optString("host")); styleBotInput(this) }
-        val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")); styleBotInput(this) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleBox.addView(text("MIKAEL BOTMOBILE", 10, green, true))
+        titleBox.addView(text(item.optString("name", "Meu bot"), 20, white, true).apply { setPadding(0, dp(3), 0, 0) })
+        header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(TextView(this).apply {
+            text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(white)
+            background = rounded(Color.rgb(25, 39, 30), 12)
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        shell.addView(header)
+        shell.addView(View(this).apply { setBackgroundColor(Color.rgb(35, 61, 43)) }, LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(10); bottomMargin = dp(10) })
+
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; background = rounded(Color.rgb(12, 24, 17), 13); setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        val tabConfig = Button(this).apply { text = "⚙  CONFIGURAÇÃO"; isAllCaps = false; textSize = 11f }
+        val tabControl = Button(this).apply { text = "🎮  CONTROLES"; isAllCaps = false; textSize = 11f }
+        fun styleTab(button: Button, selected: Boolean) {
+            button.setTextColor(if (selected) bg else muted)
+            button.background = rounded(if (selected) green else Color.TRANSPARENT, 10)
+        }
+        styleTab(tabConfig, true); styleTab(tabControl, false)
+        tabs.addView(tabConfig, LinearLayout.LayoutParams(0, dp(44), 1f))
+        tabs.addView(tabControl, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4) })
+        shell.addView(tabs)
+
+        val body = FrameLayout(this)
+        shell.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8) })
+        val configScroll = ScrollView(this).apply { isFillViewport = true }
+        val config = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(8)) }
+        configScroll.addView(config)
+        fun label(value: String) { config.addView(text(value.uppercase(), 10, muted, true).apply { setPadding(0, dp(9), 0, dp(4)) }) }
+        val botName = EditText(this).apply { hint = "Nome do bot"; setSingleLine(true); setText(item.optString("name")); styleBotInput(this) }
+        val serverIp = EditText(this).apply { hint = "IP ou domínio"; setSingleLine(true); setText(item.optString("host")); styleBotInput(this) }
+        val serverPort = EditText(this).apply { hint = "Porta"; setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port", "25565")); styleBotInput(this) }
+        val skinName = EditText(this).apply { hint = "Nome de jogador para referência de skin"; setSingleLine(true); setText(item.optString("skinName", "")); styleBotInput(this) }
         val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
         val engine = Spinner(this).apply { styleBotSpinner(this) }
         val authMode = Spinner(this).apply { styleBotSpinner(this) }
-        authMode.adapter = styledSpinnerAdapter(listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
-        authMode.setSelection(if (item.optString("auth","offline") == "microsoft") 1 else 0)
-        val accountId = EditText(this).apply {
-            setSingleLine(true)
-            hint = "E-mail ou identificador da conta Microsoft"
-            setText(item.optString("accountId",""))
-            styleBotInput(this)
-        }
-        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael","Mineflayer"))
-        val selectedEngine = item.optString("engine","mikael")
+        authMode.adapter = styledSpinnerAdapter(listOf("Offline (servidor offline)", "Microsoft (conta Java válida)"))
+        authMode.setSelection(if (item.optString("auth", "offline") == "microsoft") 1 else 0)
+        val accountId = EditText(this).apply { hint = "E-mail ou identificador Microsoft"; setSingleLine(true); setText(item.optString("accountId", "")); styleBotInput(this) }
+        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael", "Mineflayer"))
+        val selectedEngine = item.optString("engine", "mikael")
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
-        configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
+        configureVersionSpinner(mcVersion, selectedEngine, item.optString("version", "auto"))
         watchEngineSelection(engine, mcVersion)
+        label("Nome do bot"); config.addView(botName)
+        label("IP / domínio"); config.addView(serverIp)
+        label("Porta"); config.addView(serverPort)
+        label("Skin"); config.addView(skinName)
+        config.addView(text("O nome de skin é uma referência. A aparência real depende do login e dos recursos/plugins do servidor; não é possível forçar qualquer skin em todo servidor.", 11, muted, false).apply { setPadding(0, dp(4), 0, dp(4)) })
+        label("Versão do Minecraft"); config.addView(mcVersion)
+        label("Motor de conexão"); config.addView(engine)
+        label("Autenticação"); config.addView(authMode)
+        label("Identificador Microsoft (não é a senha)"); config.addView(accountId)
+        config.addView(text("Nunca informe sua senha aqui. No modo Microsoft, conclua a autorização oficial quando o app mostrar o código.", 11, muted, false).apply { setPadding(0, dp(5), 0, dp(6)) })
 
-        form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
-        form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
-        form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
-        form.addView(text("AUTENTICAÇÃO",10,muted,true)); form.addView(authMode)
-        form.addView(text("IDENTIFICADOR MICROSOFT (não é a senha)",10,muted,true)); form.addView(accountId)
-        form.addView(text("No modo Microsoft, o app mostra um código oficial de autorização. Não informe nem salve sua senha aqui.",11,muted,false))
-        form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
-        form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
-        form.addView(text("As versões listadas vêm dos metadados da biblioteca; este app ainda não testou todas em servidores reais.",11,muted,false))
-        form.addView(text("FERRAMENTAS DO BOT", 11, green, true).apply { setPadding(0, dp(18), 0, dp(5)) })
-        form.addView(text("Conecte este bot com o botão LIGAR na tela principal antes de enviar ações.", 11, muted, false).apply { setPadding(0, 0, 0, dp(6)) })
-        val controlsButton = Button(this).apply {
-            text = "🎮  CONTROLES DO BOT"
-            isAllCaps = false
-            setTextColor(bg)
-            background = rounded(green, 11)
-            setOnClickListener { showBotControlsDialog(item) }
+        val reconnectRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = rounded(Color.rgb(14, 29, 19), 12); setPadding(dp(12), dp(10), dp(8), dp(10)) }
+        val reconnectTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        reconnectTexts.addView(text("Reconectar automaticamente", 13, white, true))
+        reconnectTexts.addView(text("Tentar ligar novamente após uma queda.", 10, muted, false).apply { setPadding(0, dp(3), 0, 0) })
+        reconnectRow.addView(reconnectTexts, LinearLayout.LayoutParams(0, -2, 1f))
+        val reconnect = Switch(this).apply { isChecked = getSharedPreferences("minecraftbot", MODE_PRIVATE).getBoolean("auto_reconnect", false) }
+        reconnectRow.addView(reconnect)
+        reconnect.setOnCheckedChangeListener { _, enabled ->
+            getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", enabled).apply()
+            request("POST", "/api/settings/auto-reconnect", JSONObject().put("enabled", enabled))
         }
-        form.addView(controlsButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(5) })
-        val aiButton = Button(this).apply {
-            text = "✦  COMANDOS IA"
-            isAllCaps = false
-            setTextColor(white)
-            background = rounded(Color.rgb(43, 61, 49), 11)
-            setOnClickListener { showBotAiDialog(item) }
-        }
-        form.addView(aiButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(7) })
-        createStyledFormDialog("CONFIGURAÇÕES DO BOT", form, "SALVAR ALTERAÇÕES") { dialog ->
+        config.addView(reconnectRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+
+        val manage = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val startBot = Button(this).apply { text = "▶ INICIAR BOT"; isAllCaps = false; textSize = 11f; setTextColor(bg); background = rounded(green, 10) }
+        startBot.setOnClickListener {
             val name = botName.text.toString().trim()
-            val ip = serverIp.text.toString().trim()
-            val p = serverPort.text.toString().toIntOrNull()
+            val host = serverIp.text.toString().trim()
+            val port = serverPort.text.toString().toIntOrNull()
+            if (name.isBlank() || host.isBlank() || port == null || port !in 1..65535) {
+                Toast.makeText(this, "Confira nome, IP e porta antes de iniciar.", Toast.LENGTH_LONG).show(); return@setOnClickListener
+            }
             val v = mcVersion.selectedItem?.toString() ?: "auto"
             val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
             val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+            request("POST", "/api/connect", JSONObject().put("host", host).put("port", port).put("username", name)
+                .put("accountId", accountId.text.toString().trim()).put("auth", authValue).put("version", v).put("engine", engineId))
+            Toast.makeText(this, "Pedido para iniciar enviado.", Toast.LENGTH_SHORT).show()
+        }
+        val stopBot = Button(this).apply { text = "■ DESLIGAR"; isAllCaps = false; textSize = 11f; setTextColor(white); background = rounded(Color.rgb(111, 48, 48), 10) }
+        stopBot.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Desligar bot?").setMessage("O bot conectado será desconectado.")
+                .setNegativeButton("Cancelar", null).setPositiveButton("DESLIGAR") { _, _ -> request("POST", "/api/disconnect", JSONObject()); reconnect.isChecked = false }.show()
+        }
+        manage.addView(startBot, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
+        manage.addView(stopBot, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(4) })
+        config.addView(manage, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        val delete = Button(this).apply { text = "EXCLUIR BOT SALVO"; isAllCaps = false; textSize = 11f; setTextColor(white); background = rounded(Color.rgb(76, 39, 39), 10) }
+        delete.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Excluir este bot?").setMessage("Isso remove a configuração salva deste celular. Não apaga sua conta nem o servidor.")
+                .setNegativeButton("Cancelar", null).setPositiveButton("EXCLUIR") { _, _ ->
+                    val items = savedBots(); val next = org.json.JSONArray()
+                    for (j in 0 until items.length()) if (j != index) next.put(items.getJSONObject(j))
+                    saveBots(next); dialog.dismiss()
+                }.show()
+        }
+        config.addView(delete, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+
+        val controlScroll = ScrollView(this).apply { isFillViewport = true }
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(8)) }
+        controls.addView(text("MOVIMENTO", 10, green, true).apply { setPadding(0, dp(4), 0, dp(6)) })
+        val grid = GridLayout(this).apply { columnCount = 3 }
+        controls.addView(grid)
+        fun controlButton(labelText: String, action: String) {
+            val b = Button(this).apply { text = labelText; isAllCaps = false; textSize = 11f; setTextColor(white); background = rounded(Color.rgb(34, 57, 41), 11) }
+            b.setOnClickListener { request("POST", "/api/action", JSONObject().put("action", action)) }
+            grid.addView(b, GridLayout.LayoutParams().apply { width = 0; height = dp(52); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) })
+        }
+        controlButton("↑ Frente", "forward"); controlButton("↓ Trás", "back"); controlButton("→ Direita", "right")
+        controlButton("← Esquerda", "left"); controlButton("⤒ Pular", "jump"); controlButton("■ Parar", "stop")
+        controlButton("⚡ Correr", "sprint"); controlButton("⌁ Agachar", "sneak"); controlButton("⚔ Atacar", "attack")
+        controls.addView(text("MENSAGEM NO CHAT", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
+        val chatField = EditText(this).apply { hint = "Mensagem para enviar no servidor"; setSingleLine(true); styleBotInput(this) }
+        controls.addView(chatField, LinearLayout.LayoutParams(-1, dp(48)))
+        val sendChat = Button(this).apply { text = "ENVIAR MENSAGEM"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
+        sendChat.setOnClickListener {
+            val message = chatField.text.toString().trim()
+            if (message.isBlank()) chatField.error = "Digite uma mensagem"
+            else request("POST", "/api/chat/send", JSONObject().put("message", message))
+        }
+        controls.addView(sendChat, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+        controls.addView(text("SEGUIR JOGADOR", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
+        val followField = EditText(this).apply { hint = "Nome exato do jogador"; setSingleLine(true); styleBotInput(this) }
+        controls.addView(followField, LinearLayout.LayoutParams(-1, dp(48)))
+        val follow = Button(this).apply { text = "SEGUIR JOGADOR"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
+        follow.setOnClickListener {
+            val name = followField.text.toString().trim()
+            if (name.isBlank()) followField.error = "Digite o nome do jogador"
+            else request("POST", "/api/action", JSONObject().put("action", "follow").put("target", name))
+        }
+        controls.addView(follow, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+        controls.addView(text("IR PARA COORDENADAS", 10, green, true).apply { setPadding(0, dp(14), 0, dp(4)) })
+        val coords = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val coordX = EditText(this).apply { hint = "X"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
+        val coordY = EditText(this).apply { hint = "Y"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
+        val coordZ = EditText(this).apply { hint = "Z"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL; styleBotInput(this) }
+        coords.addView(coordX, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
+        coords.addView(coordY, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
+        coords.addView(coordZ, LinearLayout.LayoutParams(0, dp(48), 1f))
+        controls.addView(coords)
+        val goto = Button(this).apply { text = "IR ATÉ X / Y / Z"; isAllCaps = false; setTextColor(bg); background = rounded(green, 10) }
+        goto.setOnClickListener {
+            val x = coordX.text.toString().toDoubleOrNull(); val y = coordY.text.toString().toDoubleOrNull(); val z = coordZ.text.toString().toDoubleOrNull()
+            if (x == null || y == null || z == null) Toast.makeText(this, "Informe X, Y e Z válidos.", Toast.LENGTH_LONG).show()
+            else request("POST", "/api/action", JSONObject().put("action", "goto").put("x", x).put("y", y).put("z", z))
+        }
+        controls.addView(goto, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+        controls.addView(text("Seguir e ir a coordenadas dependem do pathfinder e da versão do servidor. O bot precisa estar conectado.", 11, muted, false).apply { setPadding(0, dp(8), 0, 0) })
+        controlScroll.addView(controls)
+
+        fun selectTab(showControls: Boolean) {
+            body.removeAllViews()
+            body.addView(if (showControls) controlScroll else configScroll)
+            styleTab(tabConfig, !showControls); styleTab(tabControl, showControls)
+        }
+        tabConfig.setOnClickListener { selectTab(false) }
+        tabControl.setOnClickListener { selectTab(true) }
+        selectTab(false)
+
+        val footer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, 0) }
+        val cancel = Button(this).apply { text = "FECHAR"; isAllCaps = false; setTextColor(white); background = rounded(Color.rgb(34, 49, 39), 11); setOnClickListener { dialog.dismiss() } }
+        val save = Button(this).apply { text = "SALVAR ALTERAÇÕES"; isAllCaps = false; textSize = 11f; typeface = Typeface.DEFAULT_BOLD; setTextColor(bg); background = rounded(green, 11) }
+        save.setOnClickListener {
+            val name = botName.text.toString().trim(); val host = serverIp.text.toString().trim(); val port = serverPort.text.toString().toIntOrNull()
+            val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
             val accountValue = accountId.text.toString().trim()
-            if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
-                Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
-                return@createStyledFormDialog
-            }
-            if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
-                Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
-                return@createStyledFormDialog
-            }
-            val items = savedBots()
-            if (index !in 0 until items.length()) return@createStyledFormDialog
-            items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
-            saveBots(items)
-            Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
+            if (name.isBlank() || host.isBlank() || port == null || port !in 1..65535) { Toast.makeText(this, "Confira nome, IP e porta.", Toast.LENGTH_LONG).show(); return@setOnClickListener }
+            if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) { Toast.makeText(this, "Informe um identificador Microsoft válido, sem espaços.", Toast.LENGTH_LONG).show(); return@setOnClickListener }
+            val items = savedBots(); if (index !in 0 until items.length()) return@setOnClickListener
+            items.put(index, JSONObject().put("name", name).put("host", host).put("port", port).put("skinName", skinName.text.toString().trim())
+                .put("version", mcVersion.selectedItem?.toString() ?: "auto").put("engine", if (engine.selectedItemPosition == 1) "official" else "mikael")
+                .put("auth", authValue).put("accountId", accountValue))
+            saveBots(items); Toast.makeText(this, "Configurações salvas.", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
         }
+        footer.addView(cancel, LinearLayout.LayoutParams(0, dp(46), 0.8f).apply { rightMargin = dp(5) })
+        footer.addView(save, LinearLayout.LayoutParams(0, dp(46), 1.2f).apply { leftMargin = dp(5) })
+        shell.addView(footer)
+        dialog.setContentView(shell)
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(-1, -1)
     }
 
     private fun showBotControlsDialog(item: JSONObject) {
