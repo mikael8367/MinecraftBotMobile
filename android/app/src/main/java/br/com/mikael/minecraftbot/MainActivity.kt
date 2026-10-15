@@ -470,34 +470,29 @@ class MainActivity : Activity() {
             setOnClickListener { showBotAiDialog(item) }
         }
         form.addView(aiButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(7) })
-        val dialog = AlertDialog.Builder(this).setTitle("⚙  Configurações do bot").setView(ScrollView(this).apply { isFillViewport = true; addView(form) })
-            .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = botName.text.toString().trim()
-                val ip = serverIp.text.toString().trim()
-                val p = serverPort.text.toString().toIntOrNull()
-                val v = mcVersion.selectedItem?.toString() ?: "auto"
-                val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
-                val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
-                val accountValue = accountId.text.toString().trim()
-                if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
-                    Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
-                    Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                val items = savedBots()
-                if (index !in 0 until items.length()) return@setOnClickListener
-                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
-                saveBots(items)
-                Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
+        createStyledFormDialog("CONFIGURAÇÕES DO BOT", form, "SALVAR ALTERAÇÕES") { dialog ->
+            val name = botName.text.toString().trim()
+            val ip = serverIp.text.toString().trim()
+            val p = serverPort.text.toString().toIntOrNull()
+            val v = mcVersion.selectedItem?.toString() ?: "auto"
+            val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
+            val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+            val accountValue = accountId.text.toString().trim()
+            if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
+                Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
+                return@createStyledFormDialog
             }
+            if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
+                Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
+                return@createStyledFormDialog
+            }
+            val items = savedBots()
+            if (index !in 0 until items.length()) return@createStyledFormDialog
+            items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
+            saveBots(items)
+            Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
         }
-        dialog.show()
     }
 
     private fun showBotControlsDialog(item: JSONObject) {
@@ -636,35 +631,109 @@ class MainActivity : Activity() {
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("A seleção inicial é 26.3 + Mikael experimental. A lista vem do motor, mas o servidor real precisa ser testado.",11,muted,false))
-        val dialog = AlertDialog.Builder(this).setTitle("✦  Criar novo bot").setView(ScrollView(this).apply { isFillViewport = true; addView(form) })
-            .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR BOT",null).create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = botName.text.toString().trim()
-                val ip = serverIp.text.toString().trim()
-                val p = serverPort.text.toString().toIntOrNull()
-                val v = mcVersion.selectedItem?.toString() ?: "auto"
-                val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
-                val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
-                val accountValue = accountId.text.toString().trim()
-                if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
-                    Toast.makeText(this,"Preencha nome, IP e uma porta válida.",Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
-                    Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                val items = savedBots()
-                items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
-                saveBots(items)
-                Toast.makeText(this,"Bot salvo!",Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
+        createStyledFormDialog("CRIAR NOVO BOT", form, "SALVAR BOT") { dialog ->
+            val name = botName.text.toString().trim()
+            val ip = serverIp.text.toString().trim()
+            val p = serverPort.text.toString().toIntOrNull()
+            val v = mcVersion.selectedItem?.toString() ?: "auto"
+            val engineId = if (engine.selectedItemPosition == 1) "official" else "mikael"
+            val authValue = if (authMode.selectedItemPosition == 1) "microsoft" else "offline"
+            val accountValue = accountId.text.toString().trim()
+            if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
+                Toast.makeText(this,"Preencha nome, IP e uma porta válida.",Toast.LENGTH_LONG).show()
+                return@createStyledFormDialog
             }
+            if (authValue == "microsoft" && !accountValue.matches(Regex("[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}"))) {
+                Toast.makeText(this,"Informe um identificador Microsoft válido, sem espaços.",Toast.LENGTH_LONG).show()
+                return@createStyledFormDialog
+            }
+            val items = savedBots()
+            items.put(JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v).put("engine",engineId).put("auth",authValue).put("accountId",accountValue))
+            saveBots(items)
+            Toast.makeText(this,"Bot salvo!",Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
         }
-        dialog.show()
     }
 
+
+    private fun createStyledFormDialog(
+        heading: String,
+        form: View,
+        saveLabel: String,
+        onSave: (android.app.Dialog) -> Unit
+    ) {
+        val dialog = android.app.Dialog(this)
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Color.rgb(7, 17, 12), 22)
+            setPadding(dp(16), dp(12), dp(16), dp(14))
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), dp(2), dp(14))
+        }
+        val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleBox.addView(text("MIKAEL BOTMOBILE", 10, green, true))
+        titleBox.addView(text(heading, 19, white, true).apply { setPadding(0, dp(3), 0, 0) })
+        header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
+        val close = TextView(this).apply {
+            text = "✕"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            background = rounded(Color.rgb(25, 39, 30), 12)
+            setOnClickListener { dialog.dismiss() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(42), dp(42)))
+        shell.addView(header)
+        val separator = View(this).apply { setBackgroundColor(Color.rgb(35, 61, 43)) }
+        shell.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            clipToPadding = false
+            setPadding(0, dp(10), 0, dp(10))
+            addView(form)
+        }
+        shell.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        val cancel = Button(this).apply {
+            text = "CANCELAR"
+            isAllCaps = false
+            textSize = 12f
+            setTextColor(white)
+            background = rounded(Color.rgb(34, 49, 39), 12)
+            setOnClickListener { dialog.dismiss() }
+        }
+        val save = Button(this).apply {
+            text = saveLabel
+            isAllCaps = false
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(bg)
+            background = rounded(green, 12)
+            setOnClickListener { onSave(dialog) }
+        }
+        footer.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
+        footer.addView(save, LinearLayout.LayoutParams(0, dp(48), 1.25f).apply { leftMargin = dp(6) })
+        shell.addView(footer)
+        dialog.setContentView(shell)
+        dialog.window?.let { window ->
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            window.setLayout(-1, -1)
+        }
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.setLayout(-1, -1)
+        }
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(-1, -1)
+    }
 
     private fun styleBotInput(field: EditText) {
         field.textSize = 14f
