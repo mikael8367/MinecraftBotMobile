@@ -46,6 +46,7 @@ let botInfo = {
   food: null,
   position: null,
   lastError: null,
+  errorDetails: null,
   autoReconnect: false,
   updatedAt: new Date().toISOString()
 }
@@ -473,7 +474,8 @@ app.post('/api/connect', auth, (req, res) => {
         health: null,
         food: null,
         position: null,
-        lastError: 'O servidor recusou a entrada: ' + (detail || 'motivo não informado')
+        lastError: 'O servidor recusou a entrada: ' + (detail || 'motivo não informado'),
+        errorDetails: detail || 'O evento kicked não forneceu um motivo.'
       })
     })
 
@@ -483,17 +485,24 @@ app.post('/api/connect', auth, (req, res) => {
       // terminal state instead of making the UI report a different failure.
       if (['kicked', 'timeout', 'disconnected'].includes(botInfo.connectionState)) return
 
-      const message = String(error && (error.message || error) || 'Erro desconhecido').slice(0, 500)
+      const message = String(error && (error.message || error) || 'Erro desconhecido').slice(0, 4000)
+      const errorDetails = error && error.stack ? String(error.stack).slice(0, 12000) : message
       updateBotInfo({
         connectionState: botInfo.connected ? 'connected' : 'error',
         authCode: botInfo.connected ? botInfo.authCode : null,
-        lastError: message
+        lastError: message,
+        errorDetails
       })
-      console.error('[bot:error]', JSON.stringify({
+      console.error('[bot:error] Detalhes completos:', JSON.stringify({
         engine: options.engine,
         version: options.version,
         host: options.host,
-        message
+        port: options.port,
+        auth: options.auth,
+        errorName: error && error.name,
+        errorCode: error && error.code,
+        message,
+        stack: errorDetails
       }))
     })
 
@@ -522,11 +531,19 @@ app.post('/api/connect', auth, (req, res) => {
 
     connectionTimer = setTimeout(() => {
       if (bot !== activeBot || botInfo.connected) return
+      // Não substituir um erro de protocolo/socket já registrado por um timeout genérico.
+      if (['error', 'kicked', 'disconnected'].includes(botInfo.connectionState) && botInfo.lastError) {
+        console.warn('[connect:timeout] O prazo acabou, mas o erro original será preservado:', botInfo.lastError)
+        return
+      }
+      const timeoutDetail = 'Timeout após ' + (options.auth === 'microsoft' ? MICROSOFT_CONNECT_TIMEOUT_MS : CONNECT_TIMEOUT_MS) + ' ms sem evento spawn. Confira versão/protocolo, autenticação, DNS/TCP e logs anteriores.'
+      console.error('[connect:timeout]', JSON.stringify({ engine: options.engine, host: options.host, port: options.port, version: options.version, auth: options.auth, stateBeforeTimeout: botInfo.connectionState, previousError: botInfo.lastError, detail: timeoutDetail }))
       updateBotInfo({
         connected: false,
         connectionState: 'timeout',
         authCode: null,
-        lastError: 'Tempo limite de conexão excedido. Confira o IP, a porta, a versão e, no modo Microsoft, conclua a autorização antes do prazo.'
+        lastError: 'Tempo limite de conexão excedido. ' + timeoutDetail,
+        errorDetails: botInfo.errorDetails || timeoutDetail
       })
       try { activeBot.quit('Tempo limite de conexão') } catch (_) {}
     }, options.auth === 'microsoft' ? MICROSOFT_CONNECT_TIMEOUT_MS : CONNECT_TIMEOUT_MS)
@@ -543,14 +560,16 @@ app.post('/api/connect', auth, (req, res) => {
     if (activeBot) {
       try { activeBot.end('Falha ao iniciar a conexão') } catch (_) {}
     }
-    const message = String(error && (error.message || error) || 'Falha ao iniciar conexão').slice(0, 500)
+    const message = String(error && (error.message || error) || 'Falha ao iniciar conexão').slice(0, 4000)
+    const errorDetails = error && error.stack ? String(error.stack).slice(0, 12000) : message
     updateBotInfo({
       connected: false,
       connectionState: 'error',
       pathfindingAvailable: false,
-      lastError: message
+      lastError: message,
+      errorDetails
     })
-    console.error('[connect:error]', JSON.stringify({ engine: options.engine, version: options.version, message }))
+    console.error('[connect:error] Detalhes completos:', JSON.stringify({ engine: options.engine, version: options.version, host: options.host, port: options.port, auth: options.auth, errorName: error && error.name, errorCode: error && error.code, message, stack: errorDetails }))
     return res.status(500).json({ ok: false, error: message, status: getStatus() })
   }
 })
