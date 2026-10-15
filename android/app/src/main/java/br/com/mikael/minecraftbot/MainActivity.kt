@@ -426,19 +426,26 @@ class MainActivity : Activity() {
     }
 
     private fun showBotSettingsDialog(index: Int, item: JSONObject) {
-        val form = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(8),dp(20),0) }
-        val botName = EditText(this).apply { setSingleLine(true); hint="Nome do bot"; setText(item.optString("name")) }
-        val serverIp = EditText(this).apply { setSingleLine(true); hint="IP ou domínio"; setText(item.optString("host")) }
-        val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")) }
-        val mcVersion = Spinner(this)
-        val engine = Spinner(this)
-        val authMode = Spinner(this)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(14), dp(20), dp(14))
+            setBackgroundColor(bg)
+        }
+        form.addView(text("AJUSTE SEU BOT", 11, green, true).apply { setPadding(0, 0, 0, dp(4)) })
+        form.addView(text("Edite os dados do servidor e o modo de conexão.", 12, muted, false).apply { setPadding(0, 0, 0, dp(14)) })
+        val botName = EditText(this).apply { setSingleLine(true); hint="Nome do bot"; setText(item.optString("name")); styleBotInput(this) }
+        val serverIp = EditText(this).apply { setSingleLine(true); hint="IP ou domínio"; setText(item.optString("host")); styleBotInput(this) }
+        val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")); styleBotInput(this) }
+        val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
+        val engine = Spinner(this).apply { styleBotSpinner(this) }
+        val authMode = Spinner(this).apply { styleBotSpinner(this) }
         authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
         authMode.setSelection(if (item.optString("auth","offline") == "microsoft") 1 else 0)
         val accountId = EditText(this).apply {
             setSingleLine(true)
             hint = "E-mail ou identificador da conta Microsoft"
             setText(item.optString("accountId",""))
+            styleBotInput(this)
         }
         engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
         val selectedEngine = item.optString("engine","mikael")
@@ -455,7 +462,7 @@ class MainActivity : Activity() {
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("As versões listadas vêm dos metadados da biblioteca; este app ainda não testou todas em servidores reais.",11,muted,false))
-        val dialog = AlertDialog.Builder(this).setTitle("Configurações do bot").setView(form)
+        val dialog = AlertDialog.Builder(this).setTitle("⚙  Configurações do bot").setView(ScrollView(this).apply { isFillViewport = true; addView(form) })
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -486,17 +493,24 @@ class MainActivity : Activity() {
     }
 
     private fun showCreateBotDialog() {
-        val form = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(8),dp(20),0) }
-        val botName = EditText(this).apply { hint="Nome do bot (ex.: MikaelBot)"; setSingleLine(true) }
-        val serverIp = EditText(this).apply { hint="IP ou domínio (ex.: servidor.aternos.me)"; setSingleLine(true) }
-        val serverPort = EditText(this).apply { hint="Porta (ex.: 25565)"; setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_NUMBER }
-        val mcVersion = Spinner(this)
-        val engine = Spinner(this)
-        val authMode = Spinner(this)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(14), dp(20), dp(14))
+            setBackgroundColor(bg)
+        }
+        form.addView(text("CONFIGURE SUA CONEXÃO", 11, green, true).apply { setPadding(0, 0, 0, dp(4)) })
+        form.addView(text("Preencha os dados e escolha como o bot vai entrar no servidor.", 12, muted, false).apply { setPadding(0, 0, 0, dp(14)) })
+        val botName = EditText(this).apply { hint="Nome do bot (ex.: MikaelBot)"; setSingleLine(true); styleBotInput(this) }
+        val serverIp = EditText(this).apply { hint="IP ou domínio (ex.: servidor.aternos.me)"; setSingleLine(true); styleBotInput(this) }
+        val serverPort = EditText(this).apply { hint="Porta (ex.: 25565)"; setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_NUMBER; styleBotInput(this) }
+        val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
+        val engine = Spinner(this).apply { styleBotSpinner(this) }
+        val authMode = Spinner(this).apply { styleBotSpinner(this) }
         authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
         val accountId = EditText(this).apply {
             setSingleLine(true)
             hint = "E-mail ou identificador da conta Microsoft"
+            styleBotInput(this)
         }
         engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
         configureVersionSpinner(mcVersion, "mikael", "26.3")
@@ -511,7 +525,7 @@ class MainActivity : Activity() {
         form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
         form.addView(text("MOTOR DE CONEXÃO",10,muted,true)); form.addView(engine)
         form.addView(text("A seleção inicial é 26.3 + Mikael experimental. A lista vem do motor, mas o servidor real precisa ser testado.",11,muted,false))
-        val dialog = AlertDialog.Builder(this).setTitle("Criar bot").setView(form)
+        val dialog = AlertDialog.Builder(this).setTitle("✦  Criar novo bot").setView(ScrollView(this).apply { isFillViewport = true; addView(form) })
             .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR BOT",null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -538,6 +552,21 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+
+    private fun styleBotInput(field: EditText) {
+        field.textSize = 14f
+        field.setTextColor(white)
+        field.setHintTextColor(muted)
+        field.setPadding(dp(13), dp(11), dp(13), dp(11))
+        field.background = rounded(Color.rgb(12, 24, 17), 11)
+        field.minimumHeight = dp(48)
+    }
+
+    private fun styleBotSpinner(spinner: Spinner) {
+        spinner.setPadding(dp(8), dp(5), dp(8), dp(5))
+        spinner.background = rounded(Color.rgb(12, 24, 17), 11)
     }
 
     private fun buildControlPage() {
