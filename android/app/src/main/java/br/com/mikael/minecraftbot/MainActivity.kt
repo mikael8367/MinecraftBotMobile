@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private var selectedTab = 0
     private lateinit var botListContainer: LinearLayout
     private lateinit var monitoringSwitch: Switch
+    private lateinit var autoReconnectSwitch: Switch
     private var pendingMonitoringPermission = false
     private var lastShownAuthCode = ""
 
@@ -179,6 +180,29 @@ class MainActivity : Activity() {
         monitoringRow.addView(monitoringSwitch)
         monitoringSwitch.setOnCheckedChangeListener { _, enabled -> setForegroundMonitoring(enabled) }
         statusCard.addView(monitoringRow)
+
+        val reconnectRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(8), dp(2), dp(2))
+        }
+        val reconnectLabels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        reconnectLabels.addView(text("Reconectar automaticamente", 13, white, true))
+        reconnectLabels.addView(text("Tenta conectar de novo se a conexão cair. Não reconecta se o servidor expulsar o bot ou se você desativar.", 10, muted, false).apply {
+            setPadding(0, dp(3), dp(8), 0)
+        })
+        reconnectRow.addView(reconnectLabels, LinearLayout.LayoutParams(0, -2, 1f))
+        autoReconnectSwitch = Switch(this).apply {
+            contentDescription = "Ativar reconexão automática"
+            isChecked = getSharedPreferences("minecraftbot", MODE_PRIVATE).getBoolean("auto_reconnect", false)
+        }
+        reconnectRow.addView(autoReconnectSwitch)
+        autoReconnectSwitch.setOnCheckedChangeListener { _, enabled ->
+            getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", enabled).apply()
+            request("POST", "/api/settings/auto-reconnect", JSONObject().put("enabled", enabled))
+        }
+        statusCard.addView(reconnectRow)
+
         val disableBotButton = Button(this).apply {
             text = "DESATIVAR BOT"
             isAllCaps = false
@@ -662,6 +686,26 @@ class MainActivity : Activity() {
                     val connected = state.optBoolean("connected", parsed.optBoolean("connected", false))
                     val serverError = parsed.optString("error").ifBlank { state.optString("lastError", "") }
                     val connectionState = state.optString("connectionState", if (connected) "connected" else "disconnected")
+                    if (path == "/api/status" && state.has("autoReconnect") && ::autoReconnectSwitch.isInitialized) {
+                        val enabled = state.optBoolean("autoReconnect", false)
+                        if (autoReconnectSwitch.isChecked != enabled) {
+                            autoReconnectSwitch.setOnCheckedChangeListener(null)
+                            autoReconnectSwitch.isChecked = enabled
+                            autoReconnectSwitch.setOnCheckedChangeListener { _, checked ->
+                                getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", checked).apply()
+                                request("POST", "/api/settings/auto-reconnect", JSONObject().put("enabled", checked))
+                            }
+                        }
+                    }
+                    if (path == "/api/disconnect" && code in 200..299 && ::autoReconnectSwitch.isInitialized) {
+                        autoReconnectSwitch.setOnCheckedChangeListener(null)
+                        autoReconnectSwitch.isChecked = false
+                        autoReconnectSwitch.setOnCheckedChangeListener { _, checked ->
+                            getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", checked).apply()
+                            request("POST", "/api/settings/auto-reconnect", JSONObject().put("enabled", checked))
+                        }
+                        getSharedPreferences("minecraftbot", MODE_PRIVATE).edit().putBoolean("auto_reconnect", false).apply()
+                    }
                     val authState = state.optJSONObject("authCode")
                     val deviceCode = authState?.optString("userCode", "").orEmpty()
                     val verificationUri = authState?.optString("verificationUri", "https://microsoft.com/devicelogin").orEmpty()
