@@ -38,9 +38,18 @@ test('compatibility gate follows negotiated protocol, not requested version', ()
   assert.equal(writes.at(-1).params.status, 5)
 })
 
-test('compatibility can use the resolved version when protocol metadata is absent', () => {
-  const { bot } = makeBot('26.3', null)
+test('compatibility never activates from a requested version without negotiated protocol', () => {
+  const { bot, client, writes } = makeBot('26.3', null)
+  assert.equal(is26_3(bot), false)
+  installMikaelCompatibility(bot)
+  client.write('block_dig', { status: 5 })
+  assert.equal(writes.at(-1).params.status, 5)
+
+  // Only the negotiated protocol enables the shim.
+  bot.protocolVersion = 777
   assert.equal(is26_3(bot), true)
+  client.write('block_dig', { status: 5 })
+  assert.equal(writes.at(-1).params.status, 6)
 })
 
 test('26.3 shifts legacy block_dig status IDs without mutating caller payload', () => {
