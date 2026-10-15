@@ -428,17 +428,8 @@ class MainActivity : Activity() {
             }
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
-                // Use the upstream Mineflayer engine for the default connection path.
-                // The experimental fork has produced protocol parsing errors on live servers.
-                val engineId = "official"
-                if (item.optString("engine", "mikael") != engineId) {
-                    val updated = savedBots()
-                    if (i in 0 until updated.length()) {
-                        updated.put(i, JSONObject(updated.getJSONObject(i).toString()).put("engine", engineId))
-                        saveBots(updated)
-                    }
-                    appendLog("Motor alterado para Mineflayer oficial para priorizar compatibilidade.")
-                }
+                // Preserve the engine saved for this bot; do not silently replace it.
+                val engineId = item.optString("engine", "mikael")
                 appendLog("Bot selecionado: " + item.optString("name"))
                 appendLog("Conectando como Java; confira se o host e a porta ainda são os atuais do Aternos.")
                 lastShownAuthCode = ""
@@ -876,8 +867,8 @@ class MainActivity : Activity() {
             styleBotInput(this)
         }
         engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael (experimental)","Mineflayer oficial"))
-        engine.setSelection(1)
-        configureVersionSpinner(mcVersion, "official", "auto")
+        engine.setSelection(0)
+        configureVersionSpinner(mcVersion, "mikael", "26.3")
         watchEngineSelection(engine, mcVersion)
 
         form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
