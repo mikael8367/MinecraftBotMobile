@@ -496,7 +496,7 @@ app.post('/api/connect', auth, (req, res) => {
         pathfindingAvailable: false,
         lastError: botInfo.lastError || (detail && detail !== 'socketClosed' ? 'Conexão encerrada: ' + detail : null)
       })
-      if (nextState !== 'kicked' && nextState !== 'disconnected') scheduleReconnect(detail || nextState)
+      if (nextState !== 'kicked') scheduleReconnect(detail || nextState)
     })
 
     connectionTimer = setTimeout(() => {
