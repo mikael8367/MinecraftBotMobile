@@ -5,7 +5,7 @@
 - Validação de endereço, porta, usuário offline e versão.
 - Ciclo de vida de conexão (spawn, erro, kick, timeout, disconnect).
 - Cancelamento de temporizadores e dos controles de movimento.
-- Comandos de texto, incluindo acentos em português.
+- Comandos em português: acentos, negações e frases que citavam palavras-chave sem dar uma ordem.
 - Inicialização opcional do pathfinder.
 - Testes automatizados de validação, metadados e interpretação de comandos.
 
@@ -22,13 +22,14 @@ A página upstream de Mineflayer declara versões até 26.1; o fork `@wp2508/min
 ## Bugs corrigidos nesta revisão
 1. **Sprint sem deslocamento:** o controle de corrida era ativado sem pressionar movimento para frente. Agora o comando ativa frente e sprint com temporizadores separados.
 2. **Evento atrasado de conexão antiga:** o evento `end` de um bot substituído podia limpar o temporizador de conexão do bot novo. Agora o handler verifica a identidade do bot antes de limpar temporizadores.
-3. **Comandos com acentos:** o parser está isolado e normaliza texto em português antes de interpretar comandos.
+3. **Comandos imprecisos:** o parser normaliza acentos, rejeita frases negadas e reconhece comandos diretos completos para reduzir ações acidentais.
 4. **Versões divergentes na interface:** as opções são atualizadas a partir de `/api/capabilities` e filtradas pelo motor selecionado.
 5. **Estado de conexão impreciso:** o app consulta `/api/status` após iniciar conexão, mostra o estado recebido e encerra a consulta periódica após um estado terminal.
-6. **Pathfinder em versões modernas:** seu carregamento fica adiado até o spawn e não é feito para servidores detectados como 26.x; seguir jogador reporta indisponibilidade quando o pathfinder não é marcado como disponível.
+6. **Pathfinder em versões modernas:** o carregamento fica adiado até o spawn e desativado a partir do protocolo 775 (incluindo 26.x) até haver validação da pilha de física.
+7. **Kick do servidor:** o backend limpa os temporizadores e o estado disponível do pathfinder quando o bot é expulso.
 
 ## Limites atuais
 - Login configurado como `auth: 'offline'`; não autentica contas Microsoft e depende de o servidor aceitar entrada offline.
-- A compatibilidade de `mineflayer-pathfinder` com protocolos 26.x não foi validada; por isso o pathfinder é desativado nesses servidores.
+- A compatibilidade de `mineflayer-pathfinder` com protocolos a partir de 775 não foi validada; por isso o pathfinder fica desativado nesse intervalo.
 - Os testes do projeto são testes de lógica e metadados; não substituem testes de integração contra servidores reais em cada versão.
 - Use HTTPS e um `API_TOKEN` forte no Render. Não compartilhe o token em código, logs ou capturas de tela.
