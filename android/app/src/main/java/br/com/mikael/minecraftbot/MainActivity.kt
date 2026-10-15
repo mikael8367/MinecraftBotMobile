@@ -254,6 +254,37 @@ class MainActivity : Activity() {
             getSharedPreferences("minecraftbot", MODE_PRIVATE).getBoolean("auto_reconnect", false)
         ), quiet = true)
         if (monitoringSwitch.isChecked) setForegroundMonitoring(true)
+
+        // Solicita o token somente na primeira abertura (ou se ele tiver sido apagado).
+        if (getSharedPreferences("minecraftbot", MODE_PRIVATE)
+                .getString("api_access", "").isNullOrBlank()) {
+            window.decorView.post { promptApiTokenAtLaunch() }
+        }
+    }
+
+    private fun promptApiTokenAtLaunch() {
+        val input = EditText(this).apply {
+            hint = "API_TOKEN do backend"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Configurar acesso")
+            .setMessage("Digite o API_TOKEN configurado no backend. Ele será salvo neste celular e não será solicitado novamente, a menos que seja apagado ou fique inválido.")
+            .setView(input)
+            .setCancelable(false)
+            .setPositiveButton("Salvar token") { _, _ ->
+                val entered = input.text.toString().trim()
+                if (entered.isBlank()) {
+                    Toast.makeText(this, "Informe o token para continuar.", Toast.LENGTH_LONG).show()
+                    promptApiTokenAtLaunch()
+                } else {
+                    getSharedPreferences("minecraftbot", MODE_PRIVATE).edit()
+                        .putString("api_access", entered).apply()
+                    request("GET", "/api/status", JSONObject())
+                }
+            }
+            .show()
     }
 
     private fun setForegroundMonitoring(enabled: Boolean) {
