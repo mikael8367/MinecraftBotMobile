@@ -249,6 +249,10 @@ class MainActivity : Activity() {
         buildBotsInfoPage(); buildControlPage(); buildAiPage()
         showTab(0)
         loadEngineCapabilities()
+        request("POST", "/api/settings/auto-reconnect", JSONObject().put(
+            "enabled",
+            getSharedPreferences("minecraftbot", MODE_PRIVATE).getBoolean("auto_reconnect", false)
+        ), quiet = true)
         if (monitoringSwitch.isChecked) setForegroundMonitoring(true)
     }
 
