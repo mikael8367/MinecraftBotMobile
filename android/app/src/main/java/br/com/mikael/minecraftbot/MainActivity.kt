@@ -636,6 +636,7 @@ class MainActivity : Activity() {
                     }
 
                     status.text = when {
+                        path == "/api/server-check" && code in 200..299 -> "● SERVIDOR: " + parsed.optString("message", "Verificação concluída")
                         code !in 200..299 -> "● API com erro (HTTP $code)"
                         (path == "/api/status" || path == "/api/connect") && connected -> "● BOT ON — conectado ao mundo"
                         (path == "/api/status" || path == "/api/connect") && deviceCode.isNotBlank() -> "● AUTENTICAÇÃO MICROSOFT — código $deviceCode"
