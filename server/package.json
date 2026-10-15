@@ -1,6 +1,6 @@
 {
   "name": "minecraftbotmobile-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Backend API for MinecraftBotMobile",
   "main": "index.js",
@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "mineflayer": "npm:@wp2508/mineflayer@4.42.2",
+    "mineflayer": "^4.39.0",
+    "mineflayer-mikael": "npm:@wp2508/mineflayer@4.42.2",
     "mineflayer-pathfinder": "^2.4.5"
   }
 }
