@@ -296,7 +296,9 @@ app.post('/api/connect', auth, (req, res) => {
     // Resolve the server version first. Pathfinder uses a separate physics stack
     // and is intentionally not loaded for modern protocols until compatibility is verified.
     activeBot.once('spawn', () => {
-      if (bot !== activeBot) return
+      // A late spawn must never overwrite a kick, timeout, or fatal connection
+      // error already reported for this same bot instance.
+      if (bot !== activeBot || ['kicked', 'timeout', 'disconnected', 'error'].includes(botInfo.connectionState)) return
       clearConnectionTimer()
       const detectedVersion = String(activeBot.version || '')
       const negotiatedProtocol = Number(activeBot.protocolVersion ?? (activeBot._client && activeBot._client.protocolVersion))
