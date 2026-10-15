@@ -80,7 +80,7 @@ class MainActivity : Activity() {
 
     private fun configureVersionSpinner(spinner: Spinner, engineId: String, preferred: String) {
         val options = supportedVersions(engineId)
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
+        spinner.adapter = styledSpinnerAdapter(options)
         val preferredIndex = options.indexOf(preferred).let { if (it >= 0) it else 0 }
         spinner.setSelection(preferredIndex)
     }
@@ -429,7 +429,7 @@ class MainActivity : Activity() {
         val mcVersion = Spinner(this).apply { styleBotSpinner(this) }
         val engine = Spinner(this).apply { styleBotSpinner(this) }
         val authMode = Spinner(this).apply { styleBotSpinner(this) }
-        authMode.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
+        authMode.adapter = styledSpinnerAdapter(listOf("Offline (servidor offline)","Microsoft (conta Java válida)"))
         authMode.setSelection(if (item.optString("auth","offline") == "microsoft") 1 else 0)
         val accountId = EditText(this).apply {
             setSingleLine(true)
@@ -437,7 +437,7 @@ class MainActivity : Activity() {
             setText(item.optString("accountId",""))
             styleBotInput(this)
         }
-        engine.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Mineflayer Mikael","Mineflayer"))
+        engine.adapter = styledSpinnerAdapter(listOf("Mineflayer Mikael","Mineflayer"))
         val selectedEngine = item.optString("engine","mikael")
         engine.setSelection(if (selectedEngine == "official") 1 else 0)
         configureVersionSpinner(mcVersion, selectedEngine, item.optString("version","auto"))
@@ -742,6 +742,27 @@ class MainActivity : Activity() {
         field.setPadding(dp(13), dp(11), dp(13), dp(11))
         field.background = rounded(Color.rgb(12, 24, 17), 11)
         field.minimumHeight = dp(48)
+    }
+
+    private fun styledSpinnerAdapter(options: List<String>): ArrayAdapter<String> {
+        return object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, options) {
+            private fun makeRow(value: String, recycled: View?, dropdown: Boolean): TextView {
+                val row = (recycled as? TextView) ?: TextView(this@MainActivity)
+                row.text = value
+                row.textSize = 14f
+                row.setTextColor(if (dropdown) white else green)
+                row.gravity = Gravity.CENTER_VERTICAL
+                row.setPadding(dp(12), dp(if (dropdown) 12 else 9), dp(12), dp(if (dropdown) 12 else 9))
+                row.background = if (dropdown) rounded(Color.rgb(16, 31, 21), 8) else rounded(Color.rgb(12, 24, 17), 10)
+                return row
+            }
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                makeRow(getItem(position).orEmpty(), convertView, false)
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                makeRow(getItem(position).orEmpty(), convertView, true)
+        }.also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
     }
 
     private fun styleBotSpinner(spinner: Spinner) {
