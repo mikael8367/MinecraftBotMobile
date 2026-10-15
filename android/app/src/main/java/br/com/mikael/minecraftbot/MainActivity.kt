@@ -176,13 +176,16 @@ class MainActivity : Activity() {
             card.addView(text("🤖  " + item.optString("name", "Bot"),15,white,true))
             card.addView(text(item.optString("host") + ":" + item.optString("port") + "  •  Minecraft " + item.optString("version","auto"),11,muted,false).apply { setPadding(0,4,0,8) })
             val actions = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
-            val use = Button(this).apply { text="ABRIR / LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
+            val configure = Button(this).apply { text="CONFIGURAR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(43,61,49),9) }
+            configure.setOnClickListener { showBotSettingsDialog(i, item) }
+            actions.addView(configure,LinearLayout.LayoutParams(0,dp(42),1f))
+            val use = Button(this).apply { text="LIGAR"; isAllCaps=false; textSize=10f; setTextColor(bg); background=rounded(green,9) }
             use.setOnClickListener {
                 val wanted = item.optString("version","auto")
                 appendLog("Bot selecionado: " + item.optString("name"))
                 request("POST","/api/connect",JSONObject().put("host",item.optString("host")).put("port",item.optInt("port",25565)).put("username",item.optString("name")).put("version",wanted))
             }
-            actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f))
+            actions.addView(use,LinearLayout.LayoutParams(0,dp(42),1f).apply { leftMargin=dp(5) })
             val delete = Button(this).apply { text="EXCLUIR"; isAllCaps=false; textSize=10f; setTextColor(white); background=rounded(Color.rgb(65,43,43),9) }
             delete.setOnClickListener {
                 val next = org.json.JSONArray()
@@ -193,6 +196,41 @@ class MainActivity : Activity() {
             card.addView(actions)
             botListContainer.addView(card,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(8) })
         }
+    }
+
+    private fun showBotSettingsDialog(index: Int, item: JSONObject) {
+        val form = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(8),dp(20),0) }
+        val botName = EditText(this).apply { setSingleLine(true); hint="Nome do bot"; setText(item.optString("name")) }
+        val serverIp = EditText(this).apply { setSingleLine(true); hint="IP ou domínio"; setText(item.optString("host")) }
+        val serverPort = EditText(this).apply { setSingleLine(true); hint="Porta"; inputType=android.text.InputType.TYPE_CLASS_NUMBER; setText(item.optString("port","25565")) }
+        val mcVersion = Spinner(this)
+        val versions = (listOf(item.optString("version","auto")) + availableVersions).distinct()
+        mcVersion.adapter = ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,versions)
+        form.addView(text("NOME DO BOT",10,muted,true)); form.addView(botName)
+        form.addView(text("IP / DOMÍNIO",10,muted,true)); form.addView(serverIp)
+        form.addView(text("PORTA",10,muted,true)); form.addView(serverPort)
+        form.addView(text("VERSÃO DO MINECRAFT",10,muted,true)); form.addView(mcVersion)
+        val dialog = AlertDialog.Builder(this).setTitle("Configurações do bot").setView(form)
+            .setNegativeButton("Cancelar",null).setPositiveButton("SALVAR ALTERAÇÕES",null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = botName.text.toString().trim()
+                val ip = serverIp.text.toString().trim()
+                val p = serverPort.text.toString().toIntOrNull()
+                val v = mcVersion.selectedItem?.toString() ?: "auto"
+                if (name.isBlank() || ip.isBlank() || p == null || p !in 1..65535) {
+                    Toast.makeText(this,"Confira nome, IP e porta.",Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                val items = savedBots()
+                if (index !in 0 until items.length()) return@setOnClickListener
+                items.put(index, JSONObject().put("name",name).put("host",ip).put("port",p).put("version",v))
+                saveBots(items)
+                Toast.makeText(this,"Configurações salvas.",Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     private fun showCreateBotDialog() {
